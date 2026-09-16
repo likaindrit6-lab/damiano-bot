@@ -1,26 +1,27 @@
-import requests
-from bs4 import BeautifulSoup
-import time
 
-TOKEN = "INSERISCI_QUI_IL_TOKEN_DEL_TUO_BOT"
-URL = f"https://api.telegram.org/bot{TOKEN}/"
+import os, threading
+from flask import Flask
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-def get_updates(offset=0):
-    try:
-        r = requests.get(URL + "getUpdates", params={"offset": offset, "timeout": 60}, timeout=70)
-        return r.json()
-    except:
-        return {"result": []}
+app = Flask(__name__)
+@app.route('/')
+def home(): return "Bot attivo!"
 
-print("Bot avviato!")
-offset = 0
-while True:
-    data = get_updates(offset)
-    for update in data.get("result", []):
-        offset = update["update_id"] + 1
-        if "message" in update:
-            chat_id = update["message"]["chat"]["id"]
-            text = update["message"].get("text", "")
-            # Risponde a qualsiasi messaggio
-            requests.get(URL + "sendMessage", params={"chat_id": chat_id, "text": f"Ricevuto: {text}"})
-    time.sleep(1)
+TOKEN = os.environ.get("BOT_TOKEN")
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Bot ONLINE! Funziona Damiano! 🚀")
+
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"Hai scritto: {update.message.text}")
+
+def main():
+    a = Application.builder().token(TOKEN).build()
+    a.add_handler(CommandHandler("start", start))
+    a.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+    a.run_polling()
+
+if __name__ == "__main__":
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT",10000))), daemon=True).start()
+    main()
