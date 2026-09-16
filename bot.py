@@ -1,52 +1,60 @@
 
-import os, threading, requests, time
+import os, threading, requests
 from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 app = Flask(__name__)
 @app.route('/')
-def home(): 
-    return "Bot 0-0 LIVE! Damiano"
+def home():
+    return "Bot 0-0 LIVE!"
 
 TOKEN = os.environ.get("BOT_TOKEN")
 CHATS = set()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     CHATS.add(update.effective_chat.id)
-    await update.message.reply_text("✅ Bot ATTIVO Damiano! Ti avviserò su 0-0!")
+    await update.message.reply_text("✅ Bot ATTIVO Damiano! Ti avvisero' su 0-0 dal 70° all'82°!")
 
-async def check_matches(app_bot):
-    while True:
-        try:
-            # Qui va la tua logica di controllo partite 0-0
-            # Esempio: se trova una partita te lo manda
-            print("Controllo partite...")
-            # for chat_id in list(CHATS):
-            #    await app_bot.bot.send_message(chat_id, "Test segnale 0-0")
-        except Exception as e:
-            print(f"Errore check: {e}")
-        time.sleep(60)
+def get_live():
+    try:
+        r = requests.get("https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard", timeout=10).json()
+        out=[]
+        for ev in r.get('events',[]):
+            comp=ev['competitions'][0]
+            try:
+                clock = comp['status']['displayClock']
+                minuto=int(clock.split("'")[0])
+            except:
+                continue
+            if 70 <= minuto <= 82:
+                home=comp['competitors'][0]
+                away=comp['competitors'][1]
+                if home['score']=='0' and away['score']=='0':
+                    out.append(f"🔥 {home['team']['displayName']} vs {away['team']['displayName']} {minuto}' 0-0")
+        return out
+    except:
+        return []
 
-def run_bot():
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    
-    # Avvia controllo in background
-    def start_checker():
-        time.sleep(5)
-        import asyncio
-        asyncio.run(check_matches(application))
-    
-    threading.Thread(target=start_checker, daemon=True).start()
-    
-    print("Bot Telegram avviato!")
-    application.run_polling(drop_pending_updates=True)
+async def check(context: ContextTypes.DEFAULT_TYPE):
+    partite=get_live()
+    for cid in list(CHATS):
+        for p in partite:
+            try:
+                await context.bot.send_message(cid, p)
+            except:
+                pass
+
+def main():
+    a = Application.builder().token(TOKEN).build()
+    a.add_handler(CommandHandler("start", start))
+    a.job_queue.run_repeating(check, interval=60, first=10)
+    a.run_polling(drop_pending_updates=True)
 
 def run_flask():
-    port = int(os.environ.get("PORT", 10000))
+    port=int(os.environ.get("PORT",10000))
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
-    run_bot()
+    main()
