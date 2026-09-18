@@ -1,10 +1,8 @@
-from flask import Flask
+
+import os
+import time
+import requests
 import threading
-app = Flask(__name__)
-@app.route('/')
-def home():
-    return "Bot V3 attivo!"
-import os, time, requests, threading
 from flask import Flask
 
 API_KEY = os.getenv("API_FOOTBALL_KEY")
@@ -15,32 +13,40 @@ HEADERS = {"x-apisports-key": API_KEY}
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "Bot V3 Live"
-def run_web(): app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+def home():
+    return "Bot V3 Live - OK"
+
+def run_web():
+    app.run(host="0.0.0.0", port=10000)
+
 threading.Thread(target=run_web, daemon=True).start()
 
 def send_telegram(msg):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=10)
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"})
     except Exception as e:
         print(f"Telegram error: {e}")
 
 def get_live():
     try:
-        r = requests.get(f"{BASE_URL}/fixtures?live=all", headers=HEADERS, timeout=15)
+        r = requests.get(f"{BASE_URL}/fixtures?live=all", headers=HEADERS)
         return r.json().get("response", [])
-    except: return []
+    except:
+        return []
 
 def check_match(fixture):
     status = fixture['fixture']['status']['short']
-    elapsed = fixture['fixture']['status']['elapsed'] or 0
-    if status not in ["1H", "HT"]: return False
-    if elapsed < 30 or elapsed > 55: return False
-    if fixture['goals']['home'] != 1 or fixture['goals']['away'] != 1: return False
+    elapsed = fixture['fixture']['status']['elapsed']
+    if status not in ["1H", "HT"]:
+        return False
+    if elapsed is None or elapsed < 30 or elapsed > 55:
+        return False
+    if fixture['goals']['home'] != 1 or fixture['goals']['away'] != 1:
+        return False
     return True
 
-send_telegram("✅ *Bot V3 attivo!* Logica: 1T, 30-55min, 1-1, no rosso. Ogni 90 sec.")
+send_telegram("✅ *Bot V3 attivo!* Logica 1-1 (30-55')")
 
 while True:
     try:
@@ -49,7 +55,7 @@ while True:
                 home = f['teams']['home']['name']
                 away = f['teams']['away']['name']
                 el = f['fixture']['status']['elapsed']
-                send_telegram(f"🔥 *1-1 TROVATO* - {el}'\n{home} vs {away}")
+                send_telegram(f"🔥 *1-1 TROVATO* {home} vs {away} - {el}'")
         print("Controllo fatto")
     except Exception as e:
         print(e)
