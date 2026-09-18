@@ -1,4 +1,3 @@
-
 import os, threading, requests
 from flask import Flask
 from telegram import Update
@@ -7,20 +6,20 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 app = Flask(__name__)
 @app.route('/')
 def home():
-    return "Bot 0-0 LIVE!"
+    return "Bot O-O LIVE!"
 
 TOKEN = os.environ.get("BOT_TOKEN")
 CHATS = set()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     CHATS.add(update.effective_chat.id)
-    await update.message.reply_text("✅ Bot ATTIVO Damiano! Ti avvisero' su 0-0 dal 70° all'82°!")
+    await update.message.reply_text("✅ Bot ATTIVO! Ti avviserò per le partite 0-0 dal 70' all'82'")
 
 def get_live():
     try:
-        r = requests.get("https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard", timeout=10).json()
+        r = requests.get("https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard", timeout=10)
         out=[]
-        for ev in r.get('events',[]):
+        for ev in r.json().get('events',[]):
             comp=ev['competitions'][0]
             try:
                 clock = comp['status']['displayClock']
@@ -31,7 +30,7 @@ def get_live():
                 home=comp['competitors'][0]
                 away=comp['competitors'][1]
                 if home['score']=='0' and away['score']=='0':
-                    out.append(f"🔥 {home['team']['displayName']} vs {away['team']['displayName']} {minuto}' 0-0")
+                    out.append(f"🔥 {home['team']['displayName']} 0-0 {away['team']['displayName']} {minuto}'")
         return out
     except:
         return []
@@ -41,7 +40,7 @@ async def check(context: ContextTypes.DEFAULT_TYPE):
     for cid in list(CHATS):
         for p in partite:
             try:
-                await context.bot.send_message(cid, p)
+                await context.bot.send_message(chat_id=cid, text=p)
             except:
                 pass
 
