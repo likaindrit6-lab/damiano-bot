@@ -1,3 +1,4 @@
+
 import os, threading, requests
 from flask import Flask
 from telegram import Update
@@ -6,54 +7,56 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 app = Flask(__name__)
 @app.route('/')
 def home():
-    return "Bot O-O LIVE!"
+    return "Bot LIVE 0-0 - 30s OK!"
 
 TOKEN = os.environ.get("BOT_TOKEN")
+API_KEY = os.environ.get("API_KEY")
 CHATS = set()
+INVIATE = set()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     CHATS.add(update.effective_chat.id)
-    await update.message.reply_text("✅ Bot ATTIVO! Ti avviserò per le partite 0-0 dal 70' all'82'")
+    await update.message.reply_text("✅ Bot LIVE attivo! Controllo ogni 30 secondi le partite 0-0 dal 5' al 40'")
 
-def get_live():
-    try:
-        r = requests.get("https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard", timeout=10)
-        out=[]
-        for ev in r.json().get('events',[]):
-            comp=ev['competitions'][0]
-            try:
-                clock = comp['status']['displayClock']
-                minuto=int(clock.split("'")[0])
-            except:
-                continue
-            if 70 <= minuto <= 82:
-                home=comp['competitors'][0]
-                away=comp['competitors'][1]
-                if home['score']=='0' and away['score']=='0':
-                    out.append(f"🔥 {home['team']['displayName']} 0-0 {away['team']['displayName']} {minuto}'")
-        return out
-    except:
-        return []
+async def live(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    CHATS.add(update.effective_chat.id)
+    await update.message.reply_text("🔍 Modalità LIVE 30s attiva! Ti avviso io.")
 
 async def check(context: ContextTypes.DEFAULT_TYPE):
-    partite=get_live()
-    for cid in list(CHATS):
-        for p in partite:
+    try:
+        if not API_KEY or not CHATS:
+            return
+        url = "https://v3.football.api-sports.io/fixtures?live=all"
+        headers = {"x-apisports-key": API_KEY}
+        r = requests.get(url, headers=headers, timeout=10).json()
+        for f in r.get("response", []):
             try:
-                await context.bot.send_message(chat_id=cid, text=p)
-            except:
-                pass
+                if f['goals']['home'] == 0 and f['goals']['away'] == 0:
+                    elapsed = f['fixture']['status']['elapsed']
+                    if elapsed and 5 <= elapsed <= 40:
+                        fid = f['fixture']['id']
+                        if fid not in INVIATE:
+                            home = f['teams']['home']['name']
+                            away = f['teams']['away']['name']
+                            msg = f"🔔 0-0 LIVE al {elapsed}'\n{home} vs {away}\nControllo ogni 30s"
+                            for cid in list(CHATS):
+                                try:
+                                    await context.bot.send_message(chat_id=cid, text=msg)
+                                except: pass
+                            INVIATE.add(fid)
+            except: continue
+        if len(INVIATE) > 300:
+            INVIATE.clear()
+    except Exception as e:
+        print(f"Errore check: {e}")
 
 def main():
     a = Application.builder().token(TOKEN).build()
     a.add_handler(CommandHandler("start", start))
-    a.job_queue.run_repeating(check, interval=60, first=10)
-    a.run_polling(drop_pending_updates=True)
+    a.add_handler(CommandHandler("live", live))
+    # QUESTO È IL 30 SECONDI CHE VOLEVI
+    a.job_queue.run_repeating(check, interval=30, first=5)
+    a.run_polling()
 
-def run_flask():
-    port=int(os.environ.get("PORT",10000))
-    app.run(host="0.0.0.0", port=port)
-
-if __name__ == "__main__":
-    threading.Thread(target=run_flask, daemon=True).start()
-    main()
+threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000))), daemon=True).start()
+main()
