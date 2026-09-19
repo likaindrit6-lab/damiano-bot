@@ -1,65 +1,57 @@
 
-import os
-import time
-import requests
-import threading
+import os, threading, time, requests
 from flask import Flask
+from datetime import datetime
 
-API_KEY = os.getenv("API_FOOTBALL_KEY")
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-BASE_URL = "https://v3.football.api-sports.io"
-HEADERS = {"x-apisports-key": API_KEY}
+print(">>> AVVIO BOT DAMIANO <<<", flush=True)
 
 app = Flask(__name__)
+
+API_KEY = os.getenv("API_FOOTBALL_KEY")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
 @app.route('/')
 def home():
     return "Bot V3 Live - OK"
 
 def run_web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    print("Flask in avvio porta 10000...", flush=True)
+    app.run(host="0.0.0.0", port=10000)
 
-def send_telegram(text):
+def send_telegram(msg):
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        data = {"chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"}
-        requests.post(url, data=data, timeout=10)
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        requests.post(url, json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=10)
+        print(f"Telegram inviato: {msg[:30]}", flush=True)
     except Exception as e:
-        print(f"Errore Telegram: {e}")
+        print(f"Errore Telegram: {e}", flush=True)
 
 def get_live():
     try:
-        r = requests.get(f"{BASE_URL}/fixtures?live=all", headers=HEADERS, timeout=15)
-        return r.json().get("response", [])
-    except:
+        headers = {"x-apisports-key": API_KEY}
+        r = requests.get("https://v3.football.api-sports.io/fixtures?live=all", headers=headers, timeout=15)
+        data = r.json()
+        return data.get("response", [])
+    except Exception as e:
+        print(f"Errore API: {e}", flush=True)
         return []
 
-def check_match(fixture):
-    status = fixture['fixture']['status']['short']
-    elapsed = fixture['fixture']['status']['elapsed']
-    if status not in ["1H", "2H", "HT"]:
-        return False
-    if elapsed is None or elapsed < 30 or elapsed > 65:
-        return False
-    if fixture['goals']['home'] != 1 or fixture['goals']['away'] != 1:
-        return False
-    return True
-
-# --- AVVIO CORRETTO PER RENDER ---
+# AVVIO WEB IN BACKGROUND
 threading.Thread(target=run_web, daemon=True).start()
+time.sleep(2)
 
-send_telegram("✅ *Bot V3 attivo!* Logica 1-1 al 30' - Damiano")
+# AVVIO BOT
+print(">>> BOT THREAD AVVIATO <<<", flush=True)
+send_telegram("✅ *Bot V3 attivo!* - Damiano")
 
 while True:
     try:
-        for f in get_live():
-            if check_match(f):
-                home = f['teams']['home']['name']
-                away = f['teams']['away']['name']
-                el = f['fixture']['status']['elapsed']
-                send_telegram(f"🔥 *1-1 TROVATA!* {home} - {away} al {el}'")
-        print("Controllo fatto")
+        print(f"Controllo fatto {datetime.now().strftime('%H:%M:%S')}", flush=True)
+        live = get_live()
+        print(f"Partite live: {len(live)}", flush=True)
+        # qui va la tua logica di pronostici
+        time.sleep(60)
     except Exception as e:
-        print(e)
-    time.sleep(90)
+        print(f"Errore loop: {e}", flush=True)
+        time.sleep(60)
