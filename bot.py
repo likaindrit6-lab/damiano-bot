@@ -17,20 +17,20 @@ def home():
     return "Bot V3 Live - OK"
 
 def run_web():
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
-threading.Thread(target=run_web, daemon=True).start()
-
-def send_telegram(msg):
+def send_telegram(text):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"})
+        data = {"chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"}
+        requests.post(url, data=data, timeout=10)
     except Exception as e:
-        print(f"Telegram error: {e}")
+        print(f"Errore Telegram: {e}")
 
 def get_live():
     try:
-        r = requests.get(f"{BASE_URL}/fixtures?live=all", headers=HEADERS)
+        r = requests.get(f"{BASE_URL}/fixtures?live=all", headers=HEADERS, timeout=15)
         return r.json().get("response", [])
     except:
         return []
@@ -38,15 +38,18 @@ def get_live():
 def check_match(fixture):
     status = fixture['fixture']['status']['short']
     elapsed = fixture['fixture']['status']['elapsed']
-    if status not in ["1H", "HT"]:
+    if status not in ["1H", "2H", "HT"]:
         return False
-    if elapsed is None or elapsed < 30 or elapsed > 55:
+    if elapsed is None or elapsed < 30 or elapsed > 65:
         return False
     if fixture['goals']['home'] != 1 or fixture['goals']['away'] != 1:
         return False
     return True
 
-send_telegram("✅ *Bot V3 attivo!* Logica 1-1 (30-55')")
+# --- AVVIO CORRETTO PER RENDER ---
+threading.Thread(target=run_web, daemon=True).start()
+
+send_telegram("✅ *Bot V3 attivo!* Logica 1-1 al 30' - Damiano")
 
 while True:
     try:
@@ -55,7 +58,7 @@ while True:
                 home = f['teams']['home']['name']
                 away = f['teams']['away']['name']
                 el = f['fixture']['status']['elapsed']
-                send_telegram(f"🔥 *1-1 TROVATO* {home} vs {away} - {el}'")
+                send_telegram(f"🔥 *1-1 TROVATA!* {home} - {away} al {el}'")
         print("Controllo fatto")
     except Exception as e:
         print(e)
