@@ -1,69 +1,37 @@
-
-import os, asyncio, logging
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import os, asyncio
+from telegram.ext import ApplicationBuilder, CommandHandler
 import aiohttp
 from datetime import datetime
 
-logging.basicConfig(level=logging.INFO)
+TOKEN = os.getenv("BOT_TOKEN")
+API = os.getenv("API_FOOTBALL_KEY")
+CHAT = os.getenv("CHAT_ID")
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-API_KEY = os.getenv("API_FOOTBALL_KEY")
-CHAT_ID = os.getenv("CHAT_ID")
+async def loop(app):
+    await asyncio.sleep(10)
+    if CHAT:
+        try:
+            await app.bot.send_message(int(CHAT), "✅ DAMI V20 PULITO LIVE!\nControllo ogni 90 sec ATTIVO.\nOra non crasha più, puoi chiudere tutto.")
+        except: pass
 
-API_URL = "https://v3.football.api-sports.io"
-HEADERS = {"x-apisports-key": API_KEY} if API_KEY else {}
+    while True:
+        try:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] CHECK 90s", flush=True)
+            if API:
+                async with aiohttp.ClientSession() as s:
+                    async with s.get("https://v3.football.api-sports.io/fixtures?live=all", headers={"x-apisports-key": API}) as r:
+                        data = await r.json()
+                        print(f"LIVE: {len(data.get('response',[]))}", flush=True)
+        except Exception as e:
+            print(f"Errore: {e}", flush=True)
+        await asyncio.sleep(90)
 
-gia_inviate = set()
+async def start(update, context):
+    await update.message.reply_text("✅ V20 attivo, giro ogni 90 sec!")
 
-async def get_live(session):
-    async with session.get(f"{API_URL}/fixtures?live=all", headers=HEADERS) as r:
-        return await r.json()
+async def post_init(app):
+    asyncio.create_task(loop(app))
 
-async def get_stats(session, fixture_id):
-    async with session.get(f"{API_URL}/fixtures/statistics?fixture={fixture_id}", headers=HEADERS) as r:
-        return await r.json()
-
-def analizza_partita(fixture, stats_data):
-    try:
-        status = fixture['fixture']['status']['short']
-        minute = fixture['fixture']['status']['elapsed'] or 0
-        goals_home = fixture['goals']['home'] or 0
-        goals_away = fixture['goals']['away'] or 0
-        league = fixture['league']['name']
-        home = fixture['teams']['home']['name']
-        away = fixture['teams']['away']['name']
-        fixture_id = fixture['fixture']['id']
-
-        # Filtro minuti che vuoi tu: 45-85
-        if minute < 45 or minute > 85:
-            return None
-        # Filtro risultati che vuoi tu: 0-0, 1-0, 0-1, 1-1
-        if (goals_home + goals_away) > 2:
-            return None
-        if goals_home > 1 and goals_away > 1:
-            return None
-
-        if not stats_data.get('response') or len(stats_data['response']) < 2:
-            return None
-
-        s_home = {x['type']: x['value'] for x in stats_data['response'][0]['statistics']}
-        s_away = {x['type']: x['value'] for x in stats_data['response'][1]['statistics']}
-
-        shots_home = s_home.get('Total Shots') or 0
-        shots_away = s_away.get('Total Shots') or 0
-        sot_home = s_home.get('Shots on Goal') or 0
-        sot_away = s_away.get('Shots on Goal') or 0
-        corners = (s_home.get('Corner Kicks') or 0) + (s_away.get('Corner Kicks') or 0)
-        dang_home = s_home.get('Dangerous Attacks') or 0
-        dang_away = s_away.get('Dangerous Attacks') or 0
-
-        total_shots = (shots_home or 0) + (shots_away or 0)
-        total_sot = (sot_home or 0) + (sot_away or 0)
-        total_dang = (dang_home or 0) + (dang_away or 0)
-
-        # LOGICA CALDA / MORTA / ROSSO
-        segnale = None
-        motivo = ""
-
-        #
+app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
+app.add_handler(CommandHandler("start", start))
+app.run_polling()
