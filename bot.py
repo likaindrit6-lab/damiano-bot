@@ -1,6 +1,41 @@
 
 import os
+import timeimport os
+import threading
+from flask import Flask
+import telebot
 import time
+
+# --- FIX PER RENDER ---
+app = Flask(__name__)
+@app.route('/')
+def home():
+    return "Bot is Live!"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
+
+threading.Thread(target=run_flask).start()
+
+# --- BOT TELEGRAM ---
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+bot = telebot.TeleBot(TOKEN)
+
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message, "Dami sono ONLINE! 🔥 Il bot funziona! Mandami /live per le partite")
+
+@bot.message_handler(commands=['live'])
+def live(message):
+    bot.reply_to(message, "Funzione live attiva! Ora ti mando i gol")
+
+print("Bot partito...")
+while True:
+    try:
+        bot.polling(none_stop=True, interval=1, timeout=20)
+    except Exception as e:
+        print(f"Errore: {e}")
+        time.sleep(5)
 import requests
 from threading import Thread
 from flask import Flask
@@ -49,26 +84,4 @@ def handle_commands():
                 elif text.startswith("/help"):
                     send_telegram("📖 *HELP*\n\n/start - Accendi il bot\n/live - Vedi le partite live\n/gol - Ultimi gol segnati\n\nPer ora il bot ti avvisa in automatico dei gol. I comandi /live e /gol li colleghiamo alla Serie A nel prossimo step!", chat)
                 elif text.startswith("/live"):
-                    send_telegram("🔴 *Partite Live (TEST)*\n\nAl momento sto monitorando:\nInter 0-0 Milan (12')\nJuve 1-0 Napoli (45')\n\nAppena c'è un gol ti avviso io qui! Fra poco colleghiamo i dati reali.", chat)
-                elif text.startswith("/gol"):
-                    send_telegram("⚽ *Ultimo Gol (TEST)*\n\nJuve 1-0 Napoli\nGol di Vlahovic al 45'!", chat)
-
-        except Exception as e:
-            print(f"Errore polling: {e}")
-            time.sleep(5)
-
-def bot_logic():
-    time.sleep(3)
-    send_telegram("✅ *Bot 0-0 Damiano AGGIORNATO!*\n\nOra il menu funziona!\nProva a cliccare su Menu > start")
-    
-    # Avvia il controllo dei comandi
-    Thread(target=handle_commands, daemon=True).start()
-
-    # Qui poi mettiamo il controllo gol veri
-    while True:
-        time.sleep(60)
-
-if __name__ == "__main__":
-    Thread(target=bot_logic, daemon=True).start()
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+                    send_telegram("🔴 *Partite Live (TEST)*\n\nAl momento sto monitorando:\nInter 0-0 Milan (12')\nJuve 1-0 Napoli (45')\n\nAppena c'è un gol 
