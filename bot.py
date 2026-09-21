@@ -1,50 +1,45 @@
 
-import os, threading
+import os
+import threading
+import time
 from flask import Flask
+import telebot
 
-TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or "").strip()
-CHAT = (os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
+print("--- BOT V34 AVVIO DAMI ---")
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-print(f"V30 TOKEN:{bool(TOKEN)} CHAT:{bool(CHAT)}", flush=True)
-
-web = Flask(__name__)
-
-@web.route('/')
+app = Flask(__name__)
+@app.route('/')
 def home():
-    return f"V30 LIVE - TOKEN={bool(TOKEN)}"
+    return "BOT V34 ONLINE"
 
 def start_bot():
-    import asyncio
-    from telegram.ext import ApplicationBuilder, CommandHandler
-    
-    async def cmd_start(update, context):
-        await update.message.reply_text("Bot V30 acceso Dami!")
+    if not TOKEN:
+        print("ERRORE: TOKEN mancante!")
+        return
+    bot = telebot.TeleBot(TOKEN, threaded=False)
 
-    async def loop(app):
-        await asyncio.sleep(5)
-        print("V30 loop check", flush=True)
-        if CHAT:
-            try:
-                await app.bot.send_message(chat_id=int(CHAT), text="BOT V30 ACCESO Dami! Tutto OK ✅")
-                print("V30 messaggio inviato", flush=True)
-            except Exception as e:
-                print(f"V30 errore invio: {e}", flush=True)
-        while True:
-            print("vivo 90s", flush=True)
-            await asyncio.sleep(90)
-
-    async def post_init(app):
-        asyncio.create_task(loop(app))
+    @bot.message_handler(commands=['start'])
+    def cmd_start(m):
+        bot.reply_to(m, "BOT V34 ACCESO Dami! Funziona!")
 
     try:
-        print("V30 avvio polling...", flush=True)
-        app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
-        app.add_handler(CommandHandler("start", cmd_start))
-        app.run_polling()
+        if CHAT_ID:
+            bot.send_message(CHAT_ID, "BOT V34 ACCESO Dami! Se leggi questo, abbiamo vinto!")
+            print("Messaggio inviato OK!")
     except Exception as e:
-        print(f"V30 CRASH: {e}", flush=True)
+        print(f"Errore invio: {e}")
 
-threading.Thread(target=start_bot, daemon=True).start()
+    while True:
+        try:
+            bot.infinity_polling(timeout=60)
+        except Exception as e:
+            print(f"Polling errore: {e}")
+            time.sleep(5)
 
-if __name__ == "__main__":
-    web.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+if TOKEN:
+    threading.Thread(target=start_bot, daemon=True).start()
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
