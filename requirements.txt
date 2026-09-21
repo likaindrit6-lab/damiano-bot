@@ -1,5 +1,3 @@
-python-telegram-bot[job-queue]
+pyTelegramBotAPI
 flask
 requests
-pytz
-gunicorn
