@@ -1,56 +1,59 @@
 
-import os, asyncio, threading
+import os, threading, time
 from flask import Flask
-from telegram.ext import ApplicationBuilder, CommandHandler
-import aiohttp
 from datetime import datetime
 
-TOKEN = os.getenv("BOT_TOKEN")
-API = os.getenv("API_FOOTBALL_KEY")
-CHAT = os.getenv("CHAT_ID")
+print("V27 START", flush=True)
 
-# Trucco per Render Web Service
-app_web = Flask(__name__)
-@app_web.route('/')
+web = Flask(__name__)
+@web.route('/')
 def home():
-    return "V25 LIVE"
+    return "V27 LIVE DAMI"
 
 def run_web():
     port = int(os.getenv("PORT", 10000))
-    app_web.run(host='0.0.0.0', port=port)
+    web.run(host='0.0.0.0', port=port)
 
 threading.Thread(target=run_web, daemon=True).start()
 
-async def loop_90s(app):
-    await asyncio.sleep(10)
-    print("Loop V25 partito", flush=True)
-    if CHAT:
-        try:
-            await app.bot.send_message(chat_id=int(CHAT), text="✅ V25 VERDE DAMI! Render non lo spegne più!")
-        except Exception as e:
-            print(e)
+try:
+    import asyncio, aiohttp
+    from telegram.ext import ApplicationBuilder, CommandHandler
+
+    TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
+    API = os.getenv("API_FOOTBALL_KEY")
+    CHAT = os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID")
+
+    print(f"TOKEN trovato: {bool(TOKEN)}", flush=True)
+
+    if not TOKEN:
+        while True:
+            time.sleep(60)
+
+    async def loop_90s(app):
+        await asyncio.sleep(10)
+        if CHAT:
+            try:
+                await app.bot.send_message(chat_id=int(CHAT), text="✅ V27 VERDE DAMI!")
+            except:
+                pass
+        while True:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] CHECK 90s", flush=True)
+            await asyncio.sleep(90)
+
+    async def start(update, context):
+        await update.message.reply_text("✅ V27 verde!")
+
+    async def post_init(app):
+        asyncio.create_task(loop_90s(app))
+
+    application = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
+    application.add_handler(CommandHandler("start", start))
+    application.run_polling()
+
+except Exception as e:
+    print(f"ERRORE: {e}", flush=True)
+    import traceback
+    traceback.print_exc()
     while True:
-        try:
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] CHECK 90s V25", flush=True)
-            if API:
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get("https://v3.football.api-sports.io/fixtures?live=all", headers={"x-apisports-key": API}, timeout=15) as r:
-                            j = await r.json()
-                            print(f"Live: {len(j.get('response',[]))}", flush=True)
-                except Exception as e:
-                    print(f"API err: {e}", flush=True)
-        except Exception as e:
-            print(f"Loop err: {e}", flush=True)
-        await asyncio.sleep(90)
-
-async def start(update, context):
-    await update.message.reply_text("✅ V25 attivo!")
-
-async def post_init(application):
-    asyncio.create_task(loop_90s(application))
-
-print("Avvio V25...", flush=True)
-app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
-app.add_handler(CommandHandler("start", start))
-app.run_polling()
+        time.sleep(60)
