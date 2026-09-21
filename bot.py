@@ -5,7 +5,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "BOT V41 FINALE STABILE - TUTTO OK", 200
+def home(): return "BOT V42 CON MORTA - LIVE", 200
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("TELEGRAM_TOKEN") or ""
 API_FOOTBALL_KEY = os.environ.get("API_FOOTBALL_KEY") or ""
@@ -13,8 +13,8 @@ CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("CHAT_ID") or ""
 
 gia_rossi=set()
 gia_calde=set()
+gia_morte=set()
 partite_seguite={}
-schedina_oggi=""
 
 def send(testo):
     try:
@@ -26,13 +26,10 @@ def send(testo):
 def check_live():
     while True:
         try:
-            if not API_FOOTBALL_KEY:
-                print("Manca API_FOOTBALL_KEY!"); time.sleep(60); continue
+            if not API_FOOTBALL_KEY: time.sleep(60); continue
             headers={"x-apisports-key":API_FOOTBALL_KEY}
             r=requests.get("https://v3.football.api-sports.io/fixtures?live=all", headers=headers, timeout=20)
             lives=r.json().get("response",[])
-            print(f"V41 LIVE: {len(lives)}")
-
             for f in lives:
                 fid=f["fixture"]["id"]
                 minute=f["fixture"]["status"].get("elapsed") or 0
@@ -43,36 +40,49 @@ def check_live():
                 ga=f["goals"]["away"] or 0
                 score=f"{home} {gh}-{ga} {away}"
 
-                # Tracking GOL
+                # GOL TRACKER
                 if fid in partite_seguite:
-                    vecchio=partite_seguite[fid]
-                    if f"{gh}-{ga}"!=vecchio["score"]:
-                        send(f"⚽ *GOOOL {minute}'!!!*\n{score}\nEra {vecchio['score']} -> {gh}-{ga}")
+                    if f"{gh}-{ga}"!=partite_seguite[fid]["score"]:
+                        send(f"⚽ *GOOOL {minute}'!!!*\n{score}\nEra {partite_seguite[fid]['score']} -> {gh}-{ga}")
                         partite_seguite[fid]["score"]=f"{gh}-{ga}"
 
-                # CALDA
-                if minute>=30 and gh==0 and ga==0:
+                # STATS
+                def get_stats():
+                    try:
+                        rs=requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}", headers=headers, timeout=15)
+                        stats=rs.json().get("response",[])
+                        if len(stats)<2: return None, None
+                        def getv(td, name):
+                            for s in td.get("statistics",[]):
+                                if name.lower() in s.get("type","").lower():
+                                    v=s.get("value")
+                                    if v is None: return 0
+                                    try: return int(str(v).split('/')[0].strip() or 0)
+                                    except: return 0
+                            return 0
+                        shots=getv(stats[0],"on goal")+getv(stats[1],"on goal")
+                        corners=getv(stats[0],"Corner")+getv(stats[1],"Corner")
+                        return shots, corners
+                    except: return None, None
+
+                # CALDA 30'+
+                if minute>=30 and minute<70 and gh==0 and ga==0:
                     k=f"calda_{fid}"
                     if k not in gia_calde:
-                        try:
-                            rs=requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}", headers=headers, timeout=15)
-                            stats=rs.json().get("response",[])
-                            if len(stats)>=2:
-                                def getv(td, name):
-                                    for s in td.get("statistics",[]):
-                                        if name.lower() in s.get("type","").lower():
-                                            v=s.get("value")
-                                            if v is None: return 0
-                                            try: return int(str(v).split('/')[0].strip() or 0)
-                                            except: return 0
-                                    return 0
-                                shots=getv(stats[0],"on goal")+getv(stats[1],"on goal")
-                                corners=getv(stats[0],"Corner")+getv(stats[1],"Corner")
-                                if shots>=4 or corners>=6:
-                                    send(f"🔥 *CALDA {minute}'*\n{score}\nTiri in porta: {shots} Corner: {corners}\n👉 Punta, ti avviso GOL!")
-                                    gia_calde.add(k)
-                                    partite_seguite[fid]={"score":f"{gh}-{ga}","home":home,"away":away}
-                        except: pass
+                        shots,corners=get_stats()
+                        if shots is not None and (shots>=4 or corners>=6):
+                            send(f"🔥 *CALDA {minute}'*\n{score}\nTiri in porta: {shots} Corner: {corners}\n👉 Punta! Ti avviso io se segna!")
+                            gia_calde.add(k)
+                            partite_seguite[fid]={"score":f"{gh}-{ga}"}
+
+                # MORTA 65'+
+                if minute>=65 and gh==0 and ga==0:
+                    k=f"morta_{fid}"
+                    if k not in gia_morte and k not in gia_calde:
+                        shots,corners=get_stats()
+                        if shots is not None and shots<=2 and corners<=4:
+                            send(f"🥶 *MORTA {minute}' - EVITA!*\n{score}\nTiri in porta: {shots} Corner: {corners}\n❌ Partita bloccata, non puntare!")
+                            gia_morte.add(k)
 
                 # ROSSO
                 if 5<minute<65 and gh==0 and ga==0:
@@ -81,21 +91,15 @@ def check_live():
                         for ev in rev.json().get("response",[]):
                             if ev.get("type")=="Card" and "red" in str(ev.get("detail","")).lower():
                                 em=ev.get("time",{}).get("elapsed") or 0
-                                if em<70:
-                                    k=f"rosso_{fid}_{em}"
-                                    if k not in gia_rossi:
-                                        send(f"🔴 *ROSSO AL {em}'*\n{score}\nMin {minute}' - ENTRA 0-0 SUBITO!")
-                                        gia_rossi.add(k)
+                                kk=f"rosso_{fid}_{em}"
+                                if em<70 and kk not in gia_rossi:
+                                    send(f"🔴 *ROSSO AL {em}'*\n{score}\nMin {minute}' - ENTRA 0-0 SUBITO!")
+                                    gia_rossi.add(kk)
                     except: pass
 
-            # Pulisci finite
-            live_ids=[x["fixture"]["id"] for x in lives]
-            for fid in list(partite_seguite.keys()):
-                if fid not in live_ids:
-                    del partite_seguite[fid]
             time.sleep(90)
         except Exception as e:
-            print(f"Check err: {e}"); time.sleep(90)
+            print(f"Err: {e}"); time.sleep(90)
 
 def crea_schedina(data_str):
     try:
@@ -106,31 +110,22 @@ def crea_schedina(data_str):
         for f in fixtures:
             if len(sched)>=5: break
             league=f["league"]["name"]
-            if any(x in league for x in ["Premier League","Serie A","La Liga","Bundesliga","Ligue 1","Serie B","Champions","Europa"]):
-                home=f["teams"]["home"]["name"]
-                away=f["teams"]["away"]["name"]
-                ora=f["fixture"]["date"][11:16]
+            if any(x in league for x in ["Premier","Serie A","La Liga","Bundesliga","Ligue 1","Champions"]):
+                home=f["teams"]["home"]["name"]; away=f["teams"]["away"]["name"]; ora=f["fixture"]["date"][11:16]
                 sched.append(f"• {ora} {home} - {away} -> 1X / Over 0.5")
         if sched:
-            testo=f"🎫 *SCHEDINA DEL GIORNO {data_str} - Ore 10:00*\nQuota target 1.70 - 4 partite facili\n\n" + "\n".join(sched[:5])
-            testo+="\n\n💰 *Quota Tot ~1.67-1.80*\nGioca 2-5€ Dami!"
-            send(testo)
-        else:
-            send(f"🎫 Schedina {data_str}: poche partite oggi, domani meglio!")
-    except Exception as e:
-        print(f"Schedina err: {e}")
+            send(f"🎫 *SCHEDINA DEL GIORNO {data_str} 10:00*\nQuota 1.70\n\n" + "\n".join(sched[:5]) + "\n\n💰 Quota ~1.70 Gioca 2-5€!")
+    except Exception as e: print(e)
 
 def schedina_job():
-    global schedina_oggi
+    inviata=""
     while True:
         try:
             now=datetime.utcnow()
-            # 08:00 UTC = 10:00 Italia
             if now.hour==8 and now.minute<15:
                 oggi=datetime.now().strftime("%Y-%m-%d")
-                if schedina_oggi!=oggi:
-                    crea_schedina(oggi)
-                    schedina_oggi=oggi
+                if inviata!=oggi:
+                    crea_schedina(oggi); inviata=oggi
             time.sleep(60)
         except: time.sleep(60)
 
@@ -138,18 +133,14 @@ def bot_thread():
     import telebot
     while True:
         try:
-            if not TELEGRAM_TOKEN:
-                print("Manca TELEGRAM_TOKEN"); time.sleep(60); continue
+            if not TELEGRAM_TOKEN: time.sleep(60); continue
             b=telebot.TeleBot(TELEGRAM_TOKEN)
             b.delete_webhook(drop_pending_updates=True); time.sleep(1)
             @b.message_handler(commands=['start'])
-            def s(m): b.reply_to(m, f"✅ V41 LIVE!\nCHAT: {m.chat.id}")
+            def s(m): b.reply_to(m, f"✅ V42 CON MORTA LIVE!\nCHAT: {m.chat.id}\nComandi: /schedina")
             @b.message_handler(commands=['schedina'])
             def sh(m):
-                oggi=datetime.now().strftime("%Y-%m-%d")
-                b.reply_to(m, "🎫 Creo schedina...")
-                crea_schedina(oggi)
-            print("Bot polling startato")
+                b.reply_to(m, "🎫 Creo schedina..."); crea_schedina(datetime.now().strftime("%Y-%m-%d"))
             b.infinity_polling(timeout=60, long_polling_timeout=60)
         except Exception as e:
             print(f"Bot err: {e}"); time.sleep(15)
