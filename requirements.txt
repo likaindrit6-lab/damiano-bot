@@ -1,2 +1,4 @@
 
-gunicorn bot:app
+Flask
+requests
+gunicorn
