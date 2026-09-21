@@ -4,58 +4,58 @@ import time
 import threading
 import requests
 from flask import Flask
-import telebot
 
-# --- CONFIG ---
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-API_FOOTBALL_KEY = os.environ.get("API_FOOTBALL_KEY")
-CHAT_ID = os.environ.get("CHAT_ID")
-
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
 app = Flask(__name__)
 
-# Per UptimeRobot - NON TOCCARE - tiene il bot sveglio
 @app.route('/')
 def home():
-    return "BOT V35 ONLINE 24/7 - TUTTE LE LEGHE", 200
+    return "BOT V35.2 ONLINE - FIX SYNTAX", 200
 
-gia_inviati_rossi = set()
-gia_inviate_calde = set()
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+API_FOOTBALL_KEY = os.environ.get("API_FOOTBALL_KEY")
+
+print("Avvio V35.2...")
+print(f"TOKEN ok: {bool(TELEGRAM_TOKEN)}")
+print(f"API KEY ok: {bool(API_FOOTBALL_KEY)}")
 
 def check_partite():
     while True:
         try:
-            print("V35: Controllo TUTTE le partite ogni 90 sec...")
-            
             if not API_FOOTBALL_KEY:
-                print("MANCA API_FOOTBALL_KEY su Render!")
+                print("Manca API_FOOTBALL_KEY su Render, aspetto 90 sec")
                 time.sleep(90)
                 continue
 
             headers = {"x-apisports-key": API_FOOTBALL_KEY}
-            
-            # TUTTE LE PARTITE DEL MONDO LIVE
             url = "https://v3.football.api-sports.io/fixtures?live=all"
             r = requests.get(url, headers=headers, timeout=15)
             data = r.json()
             fixtures = data.get("response", [])
+            print(f"LIVE trovate: {len(fixtures)} - consumo 1 token")
             
-            print(f"V35: Trovate {len(fixtures)} LIVE")
+        except Exception as e:
+            print(f"Errore: {e}")
+        
+        time.sleep(90)
 
-            for f in fixtures:
-                fixture = f.get("fixture", {})
-                fixture_id = fixture.get("id")
-                minute = fixture.get("status", {}).get("elapsed", 0)
-                if not minute:
-                    continue
+def run_bot():
+    try:
+        import telebot
+        if not TELEGRAM_TOKEN:
+            print("Manca TELEGRAM_TOKEN, Flask resta ON")
+            return
+        bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-                teams = f.get("teams", {})
-                home = teams.get("home", {}).get("name", "")
-                away = teams.get("away", {}).get("name", "")
-                goals = f.get("goals", {})
-                g_home = goals.get("home", 0)
-                g_away = goals.get("away", 0)
+        @bot.message_handler(commands=['start'])
+        def start(m):
+            bot.reply_to(m, f"V35.2 ATTIVO! ChatID: {m.chat.id} - LIVE 24/7")
 
-                # SOLO 0-0
-                if g_home != 0 or g_away != 0:
-                    continue
+        bot.infinity_polling()
+    except Exception as e:
+        print(f"Errore Telegram: {e}")
+
+if __name__ == "__main__":
+    threading.Thread(target=run_bot, daemon=True).start()
+    threading.Thread(target=check_partite, daemon=True).start()
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
