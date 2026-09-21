@@ -1,45 +1,61 @@
 
 import os
-import threading
 import time
+import threading
+import requests
 from flask import Flask
 import telebot
 
-print("--- BOT V34 AVVIO DAMI ---")
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+# --- CONFIG ---
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+API_FOOTBALL_KEY = os.environ.get("API_FOOTBALL_KEY")
+CHAT_ID = os.environ.get("CHAT_ID")
 
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
 app = Flask(__name__)
+
+# Per UptimeRobot - NON TOCCARE - tiene il bot sveglio
 @app.route('/')
 def home():
-    return "BOT V34 ONLINE"
+    return "BOT V35 ONLINE 24/7 - TUTTE LE LEGHE", 200
 
-def start_bot():
-    if not TOKEN:
-        print("ERRORE: TOKEN mancante!")
-        return
-    bot = telebot.TeleBot(TOKEN, threaded=False)
+gia_inviati_rossi = set()
+gia_inviate_calde = set()
 
-    @bot.message_handler(commands=['start'])
-    def cmd_start(m):
-        bot.reply_to(m, "BOT V34 ACCESO Dami! Funziona!")
-
-    try:
-        if CHAT_ID:
-            bot.send_message(CHAT_ID, "BOT V34 ACCESO Dami! Se leggi questo, abbiamo vinto!")
-            print("Messaggio inviato OK!")
-    except Exception as e:
-        print(f"Errore invio: {e}")
-
+def check_partite():
     while True:
         try:
-            bot.infinity_polling(timeout=60)
-        except Exception as e:
-            print(f"Polling errore: {e}")
-            time.sleep(5)
+            print("V35: Controllo TUTTE le partite ogni 90 sec...")
+            
+            if not API_FOOTBALL_KEY:
+                print("MANCA API_FOOTBALL_KEY su Render!")
+                time.sleep(90)
+                continue
 
-if TOKEN:
-    threading.Thread(target=start_bot, daemon=True).start()
+            headers = {"x-apisports-key": API_FOOTBALL_KEY}
+            
+            # TUTTE LE PARTITE DEL MONDO LIVE
+            url = "https://v3.football.api-sports.io/fixtures?live=all"
+            r = requests.get(url, headers=headers, timeout=15)
+            data = r.json()
+            fixtures = data.get("response", [])
+            
+            print(f"V35: Trovate {len(fixtures)} LIVE")
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+            for f in fixtures:
+                fixture = f.get("fixture", {})
+                fixture_id = fixture.get("id")
+                minute = fixture.get("status", {}).get("elapsed", 0)
+                if not minute:
+                    continue
+
+                teams = f.get("teams", {})
+                home = teams.get("home", {}).get("name", "")
+                away = teams.get("away", {}).get("name", "")
+                goals = f.get("goals", {})
+                g_home = goals.get("home", 0)
+                g_away = goals.get("away", 0)
+
+                # SOLO 0-0
+                if g_home != 0 or g_away != 0:
+                    continue
