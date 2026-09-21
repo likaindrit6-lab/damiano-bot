@@ -1,50 +1,56 @@
 
-import os, asyncio, aiohttp
-from datetime import datetime
+import os, asyncio, threading
+from flask import Flask
 from telegram.ext import ApplicationBuilder, CommandHandler
+import aiohttp
+from datetime import datetime
 
 TOKEN = os.getenv("BOT_TOKEN")
 API = os.getenv("API_FOOTBALL_KEY")
 CHAT = os.getenv("CHAT_ID")
 
-print("Avvio V23...", flush=True)
+# Trucco per Render Web Service
+app_web = Flask(__name__)
+@app_web.route('/')
+def home():
+    return "V25 LIVE"
 
-async def check_loop(app):
+def run_web():
+    port = int(os.getenv("PORT", 10000))
+    app_web.run(host='0.0.0.0', port=port)
+
+threading.Thread(target=run_web, daemon=True).start()
+
+async def loop_90s(app):
     await asyncio.sleep(10)
-    print("Loop pronto", flush=True)
+    print("Loop V25 partito", flush=True)
     if CHAT:
         try:
-            await app.bot.send_message(chat_id=int(CHAT), text="✅ V23 LIVE DAMI! Verde su Render! Ora gira ogni 90 sec")
-            print("Messaggio LIVE inviato", flush=True)
+            await app.bot.send_message(chat_id=int(CHAT), text="✅ V25 VERDE DAMI! Render non lo spegne più!")
         except Exception as e:
-            print(f"Errore invio: {e}", flush=True)
-
+            print(e)
     while True:
         try:
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] CHECK 90s - V23 OK", flush=True)
-            # test api se c'è chiave
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] CHECK 90s V25", flush=True)
             if API:
                 try:
-                    async with aiohttp.ClientSession() as s:
-                        async with s.get("https://v3.football.api-sports.io/fixtures?live=all", headers={"x-apisports-key": API}, timeout=15) as r:
-                            data = await r.json()
-                            print(f"LIVE fixtures: {len(data.get('response',[]))}", flush=True)
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get("https://v3.football.api-sports.io/fixtures?live=all", headers={"x-apisports-key": API}, timeout=15) as r:
+                            j = await r.json()
+                            print(f"Live: {len(j.get('response',[]))}", flush=True)
                 except Exception as e:
-                    print(f"API error: {e}", flush=True)
+                    print(f"API err: {e}", flush=True)
         except Exception as e:
-            print(f"Loop error: {e}", flush=True)
+            print(f"Loop err: {e}", flush=True)
         await asyncio.sleep(90)
 
 async def start(update, context):
-    await update.message.reply_text("✅ V23 attivo!")
+    await update.message.reply_text("✅ V25 attivo!")
 
-async def post_init(app):
-    asyncio.create_task(check_loop(app))
+async def post_init(application):
+    asyncio.create_task(loop_90s(application))
 
-if not TOKEN:
-    print("ERRORE: BOT_TOKEN manca!", flush=True)
-else:
-    app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
-    app.add_handler(CommandHandler("start", start))
-    print("Polling start...", flush=True)
-    app.run_polling()
+print("Avvio V25...", flush=True)
+app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
+app.add_handler(CommandHandler("start", start))
+app.run_polling()
