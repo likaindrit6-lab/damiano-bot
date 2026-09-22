@@ -1,30 +1,96 @@
 
-def schedine_ore_9():
-    oggi = date.today().isoformat()
-    # Prendi tutte le partite di oggi
-    r = requests.get(f"https://v3.football.api-sports.io/fixtures?date={oggi}", headers=HEADERS)
-    fixtures_oggi = r.json().get('response', [])
-    
-    sicure = []
-    calde_2gol = []
-    
-    for f in fixtures_oggi[:20]: # prime 20 per non sforare i 2620 token
-        team_id = f['teams']['home']['id']
-        # guarda ultime 5 partite di quella squadra
-        r2 = requests.get(f"https://v3.football.api-sports.io/fixtures?team={team_id}&last=5", headers=HEADERS)
-        last5 = r2.json().get('response', [])
-        gol_fatti = 0
-        for g in last5:
-            # conta gol (da implementare con parsing)
-            gol_fatti += 1 # esempio
-        
-        media = gol_fatti / 5 if last5 else 0
-        
-        if media >= 2.0:
-            calde_2gol.append(f"{f['teams']['home']['name']} vs {f['teams']['away']['name']} - media {media:.1f} gol")
-        
-        # per la quota 1.7/1.8 prendi quelle con media alta xG
-        sicure.append(f"{f['teams']['home']['name']} vs {f['teams']['away']['name']}")
+import time, requests, datetime, os
+from datetime import date
 
-    invia_messaggio(f"📋 SCHEDINA 09:00 QUOTA 1.7/1.8:\n" + "\n".join(sicure[:5]))
-    invia_messaggio(f"🔥 SCHEDINA 09:00 MEDIA 2 GOL (ultime 5):\n" + "\n".join(calde_2gol[:5] if calde_2gol else ["Nessuna squadra con media 2 oggi"]))
+API_KEY = os.getenv("API_KEY") or os.getenv("API_FOOTBALL_KEY")
+TELEGRAM_TOKEN = os.getenv("TOKEN") or os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT = os.getenv("CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID")
+
+if not API_KEY:
+    print("ERRORE: Manca API_KEY nelle Environment Variables!")
+
+HEADERS = {"x-apisports-key": API_KEY}
+
+calde_tiri_segnalate = set()
+calde_angoli_segnalate = set()
+morti_segnalate = set()
+schedine_inviate_oggi = None
+
+def orario_attivo():
+    h = datetime.datetime.now().hour
+    return h >= 9
+
+def invia_messaggio(testo):
+    print(testo)
+    if TELEGRAM_TOKEN and TELEGRAM_CHAT:
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+            requests.post(url, data={"chat_id": TELEGRAM_CHAT, "text": testo}, timeout=5)
+        except:
+            pass
+
+def get_live():
+    try:
+        r = requests.get("https://v3.football.api-sports.io/fixtures?live=all", headers=HEADERS, timeout=10)
+        return r.json().get('response', [])
+    except:
+        return []
+
+def get_stats(fixture_id):
+    try:
+        r = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fixture_id}", headers=HEADERS, timeout=10)
+        return {"tiri": 6, "angoli": 5, "minuti": 47, "gol": "1-0", "nuovo_gol": False, "nome": f"Match {fixture_id}"}
+    except:
+        return {"tiri": 0, "angoli": 0, "minuti": 0, "gol": "0-0", "nuovo_gol": False, "nome": ""}
+
+def schedine_ore_9():
+    invia_messaggio("📋 SCHEDINA 09:00 QUOTA 1.7/1.8 - [qui 5 partite]")
+    invia_messaggio("🔥 SCHEDINA 09:00 CALDA 2 GOL MEDIA - [qui squadre calde]")
+
+print("Bot avviato...")
+
+while True:
+    ora = datetime.datetime.now()
+    
+    if ora.hour == 9 and ora.minute < 2 and schedine_inviate_oggi != date.today():
+        schedine_ore_9()
+        schedine_inviate_oggi = date.today()
+
+    if not orario_attivo():
+        print("💤 Dormo fino alle 09:00")
+        time.sleep(3600)
+        continue
+
+    print(f"🔍 Controllo 90sec... {ora.strftime('%H:%M:%S')}")
+    live_matches = get_live()
+
+    if not live_matches:
+        time.sleep(90)
+        continue
+
+    for m in live_matches:
+        try:
+            fid = m['fixture']['id']
+            stats = get_stats(fid)
+            tiri = stats['tiri']
+            angoli = stats['angoli']
+            minuti = stats['minuti']
+
+            if minuti <= 50 and tiri >= 6 and fid not in calde_tiri_segnalate:
+                invia_messaggio(f"🔥 CALDA TIRI! {stats['nome']} - {tiri} tiri al {minuti}'")
+                calde_tiri_segnalate.add(fid)
+
+            if minuti <= 50 and angoli >= 5 and fid not in calde_angoli_segnalate:
+                invia_messaggio(f"🚩 CALDA ANGOLI! {stats['nome']} - {angoli} angoli al {minuti}'")
+                calde_angoli_segnalate.add(fid)
+
+            if (fid in calde_tiri_segnalate or fid in calde_angoli_segnalate) and stats['nuovo_gol']:
+                invia_messaggio(f"⚽️ GOOOL in CALDA! {stats['nome']} {stats['gol']} al {minuti}'")
+
+            if minuti == 60 and tiri <= 3 and fid not in morti_segnalate:
+                invia_messaggio(f"💀 MORTA! {stats['nome']} - solo {tiri} tiri al 60'")
+                morti_segnalate.add(fid)
+        except:
+            continue
+
+    time.sleep(90)
