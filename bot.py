@@ -72,4 +72,4 @@ if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.job_queue.run_repeating(check_all, interval=60, first=10)
     print("Bot avviato")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
