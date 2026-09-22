@@ -1,2 +1,2 @@
 
-3.11.11
+application.add_handler(CommandHandler("live_debug", live_debug))
