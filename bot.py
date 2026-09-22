@@ -6,7 +6,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 TOKEN = os.getenv("BOT_TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔥 DAMI BOT OK! SONO LIVE! ERRORE FIXATO!")
+    await update.message.reply_text("🔥 DAMI BOT OK! FIXATO!")
 
 def main():
     print("Bot avviato...")
