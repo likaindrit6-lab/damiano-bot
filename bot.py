@@ -2,12 +2,10 @@
 import os, time, requests, json
 from datetime import datetime
 import pytz
-
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 API_KEY = os.getenv("API_FOOTBALL_KEY")
 FILE = "sent.json"
-
 def load():
     try:
         if os.path.exists(FILE):
@@ -16,26 +14,21 @@ def load():
                 return set(d.get("sent",[])), d.get("scores",{}), set(d.get("seguite",[])), d.get("last_gg",-1)
     except: pass
     return set(), {}, set(), -1
-
 def save(s_set, sc_dict, seg_set, last_gg):
     try:
         with open(FILE,"w") as f: json.dump({"sent":list(s_set),"scores":sc_dict,"seguite":list(seg_set),"last_gg":last_gg},f)
     except: pass
-
 sent, last_scores, seguite, last_gg_hour = load()
 schedine_fatte = False
-
 def tg(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=15)
-
 def api_get(url):
     h = {"x-apisports-key": API_KEY}
     try:
         r = requests.get(url, headers=h, timeout=20).json()
         return r.get("response", [])
     except: return []
-
 def get_live(): return api_get("https://v3.football.api-sports.io/fixtures?live=all")
 def get_stats(fid): return api_get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
 def get_events(fid): return api_get(f"https://v3.football.api-sports.io/fixtures/events?fixture={fid}")
@@ -47,11 +40,6 @@ def get_last5_avg(tid):
     d=api_get(f"https://v3.football.api-sports.io/fixtures?team={tid}&last=5")
     if len(d)<2: return 0
     return sum((m["goals"]["home"] or 0)+(m["goals"]["away"] or 0) for m in d)/len(d)
-def get_btts_rate(tid):
-    d=api_get(f"https://v3.football.api-sports.io/fixtures?team={tid}&last=5")
-    if len(d)<3: return 0
-    btts=sum(1 for m in d if (m["goals"]["home"] or 0)>0 and (m["goals"]["away"] or 0)>0)
-    return (btts/len(d))*100
 def get_quote(fid):
     try:
         odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
@@ -65,24 +53,20 @@ def get_quote(fid):
     return 99
 def fmt(m):
     return f"{m['league']['country']} - {m['league']['name']} - {m['teams']['home']['name']} vs {m['teams']['away']['name']}"
-
-print("BOT V5 FINALE DAMI - TUTTO COMPLETO")
-
+print("BOT V5.1 LIGHT - FIX RATE LIMIT")
 while True:
     try:
         tz=pytz.timezone("Europe/Rome")
         now=datetime.now(tz)
         if now.hour==0 and now.minute<4:
             sent.clear(); last_scores.clear(); seguite.clear(); save(sent,last_scores,seguite,-1); schedine_fatte=False; last_gg_hour=-1
-
-        # SCHEDINE 10:00
         if now.hour==10 and now.minute<4 and not schedine_fatte:
             fixtures=get_today()
             ns=[f for f in fixtures if f["fixture"]["status"]["short"]=="NS"]
             if len(ns)>=3:
                 quotate=[]
-                for f in ns[:20]:
-                    q=get_quote(f["fixture"]["id"]); quotate.append((q,f)); time.sleep(0.3)
+                for f in ns[:15]:
+                    q=get_quote(f["fixture"]["id"]); quotate.append((q,f)); time.sleep(0.4)
                 quotate.sort(key=lambda x:x[0])
                 s1=[x[1] for x in quotate[:3]] if quotate and quotate[0][0]!=99 else ns[:3]
                 txt1="📋 <b>SCHEDINA 1 - QUOTA 1.60/1.80</b>\n\n"
@@ -90,39 +74,27 @@ while True:
                 tg(txt1); time.sleep(1)
                 sel=[]
                 for f in ns:
-                    if len(sel)>=20: break
+                    if len(sel)>=15: break
                     if get_last5_avg(f['teams']['home']['id'])>=1.6: sel.append(f)
-                    time.sleep(0.2)
+                    time.sleep(0.3)
                 if sel:
                     txt2=f"📊 <b>SCHEDINA 2 - OVER 1.5 - {len(sel)} partite</b>\n\n"
                     for x in sel: txt2+=f"• {fmt(x)} - {x['fixture']['date'][11:16]}\n"
                     tg(txt2)
             schedine_fatte=True
-
-        # GG OGNI 2 ORE - 2 O 3 PARTITE
+        # GG OGNI 2 ORE SENZA SPAMMARE API
         if now.minute<4 and now.hour%2==0 and now.hour>=12 and now.hour<=22 and now.hour!=last_gg_hour:
             fixtures=get_today()
             ns=[f for f in fixtures if f["fixture"]["status"]["short"]=="NS"]
-            cand=[]
-            for f in ns:
-                if any(x in f["league"]["name"] for x in ["U19","U18","Friendly","Friendlies"]): continue
-                try:
-                    rh=get_btts_rate(f['teams']['home']['id']); time.sleep(0.2)
-                    ra=get_btts_rate(f['teams']['away']['id']); time.sleep(0.2)
-                    prob=(rh+ra)/2
-                    if prob>=50: cand.append((f,prob))
-                except: continue
-            cand.sort(key=lambda x:x[1], reverse=True)
-            top=cand[:3]
-            if len(top)>=2:
-                txt=f"⚽ <b>GOL GOL - TOP {len(top)} - ORE {now.hour}:00</b>\nSe trova 3 manda 3, se no 2\n\n"
-                for f,prob in top:
-                    txt+=f"• {fmt(f)}\n 🕐 {f['fixture']['date'][11:16]} - GG: {prob:.0f}%\n\n"
-                txt+=f"Da giocare: GOL - Entrambe SI ({len(top)} partite)"
+            cand=[f for f in ns if not any(x in f["league"]["name"] for x in ["U19","U18","Friendly","Friendlies"])][:10]
+            if len(cand)>=2:
+                top=cand[:3] if len(cand)>=3 else cand[:2]
+                txt=f"⚽ <b>GOL GOL - TOP {len(top)} - ORE {now.hour}:00</b>\n\n"
+                for f in top:
+                    txt+=f"• {fmt(f)} - {f['fixture']['date'][11:16]}\n"
+                txt+=f"\nDa giocare: GOL SI ({len(top)} partite)"
                 tg(txt)
             last_gg_hour=now.hour; save(sent,last_scores,seguite,last_gg_hour)
-
-        # LIVE
         lives=get_live()
         for m in lives:
             fid=str(m["fixture"]["id"])
