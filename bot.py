@@ -13,15 +13,16 @@ def load():
         if os.path.exists(FILE):
             with open(FILE,"r") as f:
                 d=json.load(f)
-                return set(d.get("sent",[])), d.get("scores",{}), set(d.get("seguite",[]))
+                return set(d.get("sent",[])), d.get("scores",{}), set(d.get("seguite",[])), d.get("last_gg",-1)
     except: pass
-    return set(), {}, set()
-def save(s_set, sc_dict, seg_set):
+    return set(), {}, set(), -1
+
+def save(s_set, sc_dict, seg_set, last_gg):
     try:
-        with open(FILE,"w") as f: json.dump({"sent": list(s_set), "scores": sc_dict, "seguite": list(seg_set)}, f)
+        with open(FILE,"w") as f: json.dump({"sent":list(s_set),"scores":sc_dict,"seguite":list(seg_set),"last_gg":last_gg},f)
     except: pass
 
-sent, last_scores, seguite = load()
+sent, last_scores, seguite, last_gg_hour = load()
 schedine_fatte = False
 
 def tg(text):
@@ -42,125 +43,125 @@ def get_today():
     tz = pytz.timezone("Europe/Rome")
     today = datetime.now(tz).strftime("%Y-%m-%d")
     return api_get(f"https://v3.football.api-sports.io/fixtures?date={today}")
-def get_last5_avg(team_id):
-    data = api_get(f"https://v3.football.api-sports.io/fixtures?team={team_id}&last=5")
-    if len(data) < 2: return 0
-    tot = sum((m["goals"]["home"] or 0)+(m["goals"]["away"] or 0) for m in data)
-    return tot / len(data)
-def get_odds_quote(fid):
-    # Prova a prendere quota 1X2 più bassa
+def get_last5_avg(tid):
+    d=api_get(f"https://v3.football.api-sports.io/fixtures?team={tid}&last=5")
+    if len(d)<2: return 0
+    return sum((m["goals"]["home"] or 0)+(m["goals"]["away"] or 0) for m in d)/len(d)
+def get_btts_rate(tid):
+    d=api_get(f"https://v3.football.api-sports.io/fixtures?team={tid}&last=5")
+    if len(d)<3: return 0
+    btts=sum(1 for m in d if (m["goals"]["home"] or 0)>0 and (m["goals"]["away"] or 0)>0)
+    return (btts/len(d))*100
+def get_quote(fid):
     try:
-        odds = api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
+        odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
         if not odds: return 99
-        for book in odds[0].get("bookmakers",[]):
-            for bet in book.get("bets",[]):
-                if bet["id"]==1: # 1X2
-                    vals = [float(v["odd"]) for v in bet["values"] if v["odd"]]
+        for b in odds[0].get("bookmakers",[]):
+            for bet in b.get("bets",[]):
+                if bet["id"]==1:
+                    vals=[float(v["odd"]) for v in bet["values"] if v.get("odd")]
                     if vals: return min(vals)
     except: pass
     return 99
+def fmt(m):
+    return f"{m['league']['country']} - {m['league']['name']} - {m['teams']['home']['name']} vs {m['teams']['away']['name']}"
 
-def format_match(m):
-    country = m["league"]["country"]
-    league = m["league"]["name"]
-    home = m["teams"]["home"]["name"]
-    away = m["teams"]["away"]["name"]
-    return f"{country} - {league} - {home} vs {away}"
-
-print("BOT V3 DAMI - QUOTE BASSE + SEGUITE")
-tg("✅ <b>BOT V3 ATTIVO</b>\n- GOL solo se CALDA/MORTA\n- Schedina1: 3 quote più basse\n- Schedina2: Over 1.5\n- Blocco Amichevoli")
+print("BOT V5 FINALE DAMI - TUTTO COMPLETO")
 
 while True:
     try:
-        tz = pytz.timezone("Europe/Rome")
-        now = datetime.now(tz)
+        tz=pytz.timezone("Europe/Rome")
+        now=datetime.now(tz)
         if now.hour==0 and now.minute<4:
-            sent.clear(); last_scores.clear(); seguite.clear(); save(sent,last_scores,seguite); schedine_fatte=False
+            sent.clear(); last_scores.clear(); seguite.clear(); save(sent,last_scores,seguite,-1); schedine_fatte=False; last_gg_hour=-1
 
+        # SCHEDINE 10:00
         if now.hour==10 and now.minute<4 and not schedine_fatte:
-            fixtures = get_today()
-            ns = [f for f in fixtures if f["fixture"]["status"]["short"]=="NS"]
+            fixtures=get_today()
+            ns=[f for f in fixtures if f["fixture"]["status"]["short"]=="NS"]
             if len(ns)>=3:
-                # SCHEDINA 1 - QUOTA BASSA
                 quotate=[]
-                for f in ns[:20]: # guarda prime 20 del giorno
-                    q = get_odds_quote(f["fixture"]["id"])
-                    quotate.append((q,f))
-                    time.sleep(0.3)
-                quotate.sort(key=lambda x: x[0])
-                s1 = [x[1] for x in quotate[:3]] if quotate[0][0]!=99 else ns[:3]
-                txt1="📋 <b>SCHEDINA 1 - QUOTA 1.60/1.80 - PIU' PROBABILI</b>\n\n"
-                for x in s1: txt1+=f"• {format_match(x)} - {x['fixture']['date'][11:16]}\n"
-                tg(txt1)
-                time.sleep(1)
-                # SCHEDINA 2 - OVER 1.5
-                selected=[]
+                for f in ns[:20]:
+                    q=get_quote(f["fixture"]["id"]); quotate.append((q,f)); time.sleep(0.3)
+                quotate.sort(key=lambda x:x[0])
+                s1=[x[1] for x in quotate[:3]] if quotate and quotate[0][0]!=99 else ns[:3]
+                txt1="📋 <b>SCHEDINA 1 - QUOTA 1.60/1.80</b>\n\n"
+                for x in s1: txt1+=f"• {fmt(x)} - {x['fixture']['date'][11:16]}\n"
+                tg(txt1); time.sleep(1)
+                sel=[]
                 for f in ns:
-                    if len(selected)>=20: break
-                    try:
-                        if get_last5_avg(f['teams']['home']['id'])>=1.6 and get_last5_avg(f['teams']['away']['id'])>=1.6:
-                            selected.append(f)
-                    except: continue
+                    if len(sel)>=20: break
+                    if get_last5_avg(f['teams']['home']['id'])>=1.6: sel.append(f)
                     time.sleep(0.2)
-                if selected:
-                    txt2=f"📊 <b>SCHEDINA 2 - OVER 1.5 - {len(selected)} PARTITE</b>\n\n"
-                    for x in selected: txt2+=f"• {format_match(x)} - {x['fixture']['date'][11:16]}\n"
+                if sel:
+                    txt2=f"📊 <b>SCHEDINA 2 - OVER 1.5 - {len(sel)} partite</b>\n\n"
+                    for x in sel: txt2+=f"• {fmt(x)} - {x['fixture']['date'][11:16]}\n"
                     tg(txt2)
             schedine_fatte=True
 
-        lives = get_live()
+        # GG OGNI 2 ORE - 2 O 3 PARTITE
+        if now.minute<4 and now.hour%2==0 and now.hour>=12 and now.hour<=22 and now.hour!=last_gg_hour:
+            fixtures=get_today()
+            ns=[f for f in fixtures if f["fixture"]["status"]["short"]=="NS"]
+            cand=[]
+            for f in ns:
+                if any(x in f["league"]["name"] for x in ["U19","U18","Friendly","Friendlies"]): continue
+                try:
+                    rh=get_btts_rate(f['teams']['home']['id']); time.sleep(0.2)
+                    ra=get_btts_rate(f['teams']['away']['id']); time.sleep(0.2)
+                    prob=(rh+ra)/2
+                    if prob>=50: cand.append((f,prob))
+                except: continue
+            cand.sort(key=lambda x:x[1], reverse=True)
+            top=cand[:3]
+            if len(top)>=2:
+                txt=f"⚽ <b>GOL GOL - TOP {len(top)} - ORE {now.hour}:00</b>\nSe trova 3 manda 3, se no 2\n\n"
+                for f,prob in top:
+                    txt+=f"• {fmt(f)}\n 🕐 {f['fixture']['date'][11:16]} - GG: {prob:.0f}%\n\n"
+                txt+=f"Da giocare: GOL - Entrambe SI ({len(top)} partite)"
+                tg(txt)
+            last_gg_hour=now.hour; save(sent,last_scores,seguite,last_gg_hour)
+
+        # LIVE
+        lives=get_live()
         for m in lives:
             fid=str(m["fixture"]["id"])
             minute=m["fixture"]["status"]["elapsed"] or 0
             gh=m["goals"]["home"] or 0; ga=m["goals"]["away"] or 0
             score=f"{gh}-{ga}"
-            league_name=m["league"]["name"] or ""
-            # BLOCCO AMICHEVOLI PRIMA DI TUTTO
-            if any(x in league_name for x in ["U19","U18","U17","U16","Friendly","Friendlies","Club Friendly"]): continue
-
-            full_name=format_match(m)
+            if any(x in m["league"]["name"] for x in ["U19","U18","U17","Friendly","Friendlies","Club Friendly"]): continue
+            full=fmt(m)
             stats=get_stats(int(fid))
-            shots_on=corners=shots_tot=0
+            shots_on=corners=0
             for ts in stats:
                 for s in ts.get("statistics",[]):
                     t=s.get("type",""); v=s.get("value") or 0
                     if not isinstance(v,int): continue
                     if t=="Shots on Goal": shots_on+=v
                     if "Corner" in t: corners+=v
-                    if "Total Shots" in t: shots_tot+=v
-
-            # GOL - SOLO SE ERA SEGUITA (CALDA/MORTA)
             if fid in last_scores:
                 ogh,oga=last_scores[fid]
                 if (gh!=ogh or ga!=oga) and fid in seguite:
-                    tg(f"⚽ <b>GOL! {score} al {minute}'</b>\n{full_name}\nEra {ogh}-{oga} - Era CALDA/MORTA")
+                    tg(f"⚽ <b>GOL! {score} al {minute}'</b>\n{full}\nEra {ogh}-{oga}")
                 if gh!=ogh or ga!=oga:
-                    last_scores[fid]=(gh,ga); save(sent,last_scores,seguite)
+                    last_scores[fid]=(gh,ga); save(sent,last_scores,seguite,last_gg_hour)
             else:
                 last_scores[fid]=(gh,ga)
-
-            is_valid = (gh==0 and ga==0) or (gh==1 and ga==0) or (gh==0 and ga==1)
+            is_valid=(gh==0 and ga==0) or (gh==1 and ga==0) or (gh==0 and ga==1)
             if 5<minute<60 and is_valid:
                 if f"tiri_{fid}" not in sent and shots_on>=6:
-                    tg(f"🔥 <b>CALDA {score} al {minute}' - {shots_on} tiri</b>\n{full_name}\n📊 Tiri in porta: {shots_on}")
-                    sent.add(f"tiri_{fid}"); seguite.add(fid); save(sent,last_scores,seguite)
+                    tg(f"🔥 <b>CALDA {score} al {minute}' - {shots_on} tiri</b>\n{full}"); sent.add(f"tiri_{fid}"); seguite.add(fid); save(sent,last_scores,seguite,last_gg_hour)
                 if f"corner_{fid}" not in sent and corners>=8:
-                    tg(f"🚩 <b>CORNER {corners} al {minute}' - {score}</b>\n{full_name}\n🚩 Corner: {corners}")
-                    sent.add(f"corner_{fid}"); seguite.add(fid); save(sent,last_scores,seguite)
+                    tg(f"🚩 <b>CORNER {corners} al {minute}' - {score}</b>\n{full}"); sent.add(f"corner_{fid}"); seguite.add(fid); save(sent,last_scores,seguite,last_gg_hour)
                 if f"morta_{fid}" not in sent and minute>=30 and shots_on<=3:
-                    tg(f"💀 <b>MORTA {score} al {minute}' - {shots_on} tiri</b>\n{full_name}\n📊 {shots_on} tiri - {corners} corner")
-                    sent.add(f"morta_{fid}"); seguite.add(fid); save(sent,last_scores,seguite)
-
-            # ROSSO
+                    tg(f"💀 <b>MORTA {score} al {minute}' - {shots_on} tiri</b>\n{full}"); sent.add(f"morta_{fid}"); seguite.add(fid); save(sent,last_scores,seguite,last_gg_hour)
             if f"red_{fid}" not in sent and minute<60:
                 events=get_events(int(fid))
                 for ev in events:
                     if ev["type"]=="Card" and "Red" in str(ev.get("detail","")):
                         rmin=ev["time"]["elapsed"] or 0
                         if 0<rmin<60:
-                            tg(f"🟥 <b>ROSSO al {rmin}' (ora {minute}' {score})</b>\n{full_name}")
-                            sent.add(f"red_{fid}"); save(sent,last_scores,seguite)
-                            break
+                            tg(f"🟥 <b>ROSSO al {rmin}' (ora {minute}' {score})</b>\n{full}"); sent.add(f"red_{fid}"); save(sent,last_scores,seguite,last_gg_hour); break
         time.sleep(90)
     except Exception as e:
         print(f"ERR {e}"); time.sleep(30)
