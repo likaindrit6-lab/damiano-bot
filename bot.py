@@ -7,6 +7,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 API_KEY = os.getenv("API_FOOTBALL_KEY")
 FILE = "sent.json"
+API_URL = "https://v3.football.api-sports.io"
 
 def load():
     try:
@@ -31,17 +32,16 @@ def tg(t):
         data={"chat_id":CHAT_ID,"text":t,"parse_mode":"HTML"}, timeout=10)
     except: pass
 
-def api_get(url):
+def api_get(url, params=None):
     try:
-        r=requests.get(url, headers={"x-apisports-key":API_KEY}, timeout=20)
-        print(f"API {r.status_code} {url[-35:]}", flush=True)
+        headers={"x-apisports-key":API_KEY}
+        r=requests.get(url, headers=headers, params=params, timeout=20)
         j=r.json()
-        # stampa quanti ne ha trovati
         resp=j.get("response",[])
-        print(f"-> trovati {len(resp)}", flush=True)
+        print(f"API {r.status_code} params={params} -> trovati {len(resp)}", flush=True)
         if r.status_code==429:
-            print("429 PAUSA 10 MIN", flush=True)
-            time.sleep(600)
+            print("429 PAUSA 60s", flush=True)
+            time.sleep(60)
             return []
         return resp
     except Exception as e:
@@ -49,20 +49,21 @@ def api_get(url):
         return []
 
 def get_live():
-    # PROVA 1 - quella normale
-    lives = api_get("https://v3.football.api-sports.io/fixtures?live=all")
-    if len(lives)>0:
-        return lives
-    # PROVA 2 - se la prima da 0, prova con status live
-    print("Provo backup live...", flush=True)
-    lives2 = api_get("https://v3.football.api-sports.io/fixtures?status=1H-HT-2H-ET-BT-P-INT&timezone=Europe/Rome")
-    return lives2
+    # FIX: prova solo live=all pulito
+    lives = api_get(f"{API_URL}/fixtures", {"live":"all"})
+    finali = []
+    for f in lives:
+        short = f.get("fixture",{}).get("status",{}).get("short","")
+        if short in ["1H","HT","2H","ET","BT","P","INT","LIVE"]:
+            finali.append(f)
+    print(f"LIVE FINALI FILTRATI: {len(finali)}", flush=True)
+    return finali
 
 def get_stats(fid):
-    return api_get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
+    return api_get(f"{API_URL}/fixtures/statistics", {"fixture":fid})
 
-print("V6.8 PAGAMENTO AVVIO", flush=True)
-tg("✅ <b>BOT V6.8 ATTIVO - PIANO 19€</b>")
+print("V7.0 FIX LIVE AVVIO", flush=True)
+tg("✅ <b>BOT V7.0 FIX LIVE ATTIVO</b> - Cerca ogni 90s")
 
 while True:
     try:
@@ -74,30 +75,35 @@ while True:
 
         count=0
         for m in lives:
-            if count>=6: break
+            if count>=8: break
             fid=m["fixture"]["id"]
             minute=m["fixture"]["status"]["elapsed"] or 0
-            if minute<15 or minute>80: continue
+            if minute<15 or minute>85: continue
             
             stats=get_stats(fid)
             corners=0
             for ts in stats:
                 for s in ts.get("statistics",[]):
                     if "Corner" in s.get("type",""):
-                        v=s.get("value") or 0
+                        v=s.get("value")
                         if isinstance(v,int): corners+=v
             
             gh=m["goals"]["home"] or 0
             ga=m["goals"]["away"] or 0
-            full=f"{m['league']['name']} - {m['teams']['home']['name']} vs {m['teams']['away']['name']}"
+            home=m['teams']['home']['name']
+            away=m['teams']['away']['name']
+            lega=m['league']['name']
+            full=f"{lega} - {home} vs {away}"
 
-            if f"c{fid}" not in sent and corners>=4:
-                tg(f"🚩 <b>CORNER {corners} al {minute}' {gh}-{ga}</b>\n{full}")
+            # FILTRO ABBASSATO A 3 PER STANOTTE
+            if f"c{fid}" not in sent and corners>=3:
+                tg(f"🚩 <b>CORNER {corners} al {minute}' {gh}-{ga}</b>\n{full}\nID:{fid}")
                 sent.add(f"c{fid}")
                 save(sent,last_scores,seguite,last_gg_hour)
+                print(f"Inviato corner {fid} {corners}", flush=True)
 
             count+=1
-            time.sleep(1.5)
+            time.sleep(1.2)
 
         print("Fatto, dormo 90s", flush=True)
         time.sleep(90)
