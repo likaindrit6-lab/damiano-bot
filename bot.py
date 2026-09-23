@@ -1,5 +1,5 @@
 
-import os, time, requests
+import os, time, requests, json
 from datetime import datetime
 import pytz
 
@@ -7,7 +7,25 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 API_KEY = os.getenv("API_FOOTBALL_KEY")
 
-already_sent = set()
+SENT_FILE = "sent.json"
+
+def load_sent():
+    if os.path.exists(SENT_FILE):
+        try:
+            with open(SENT_FILE, "r") as f:
+                return set(json.load(f))
+        except:
+            return set()
+    return set()
+
+def save_sent(s):
+    try:
+        with open(SENT_FILE, "w") as f:
+            json.dump(list(s), f)
+    except:
+        pass
+
+already_sent = load_sent()
 schedine_fatte = False
 
 def send(text):
@@ -17,16 +35,9 @@ def send(text):
     except Exception as e:
         print(f"Errore TG: {e}")
 
-def get_today_fixtures():
-    tz = pytz.timezone("Europe/Rome")
-    today = datetime.now(tz).strftime("%Y-%m-%d")
-    h = {"x-apisports-key": API_KEY}
-    r = requests.get(f"https://v3.football.api-sports.io/fixtures?date={today}", headers=h, timeout=15).json()
-    return r.get("response", [])
-
 def get_live():
     h = {"x-apisports-key": API_KEY}
-    r = requests.get("https://v3.football.api-sports.io/fixtures?live=all", headers=h, timeout=15).json()
+    r = requests.get("https://v3.football.api-sports.io/fixtures?live=all", headers=h, timeout=20).json()
     return r.get("response", [])
 
 def get_stats(fid):
@@ -34,49 +45,25 @@ def get_stats(fid):
     r = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}", headers=h, timeout=15).json()
     return r.get("response", [])
 
-print("--- BOT DAMI FINALE 60' + 0-0/1-0 AVVIATO ---")
-send("✅ <b>Bot Dami FINALE V2 - TUTTO A 60'</b>\n- 0-0 e 1-0 / 0-1\n- 🔥 CALDA e 💀 MORTA dal 60'\n- 2 Schedine ore 10:00\nControllo ogni 60 sec")
+print("--- BOT V3 FIX SPAM AVVIATO ---")
+# Manda messaggio avvio solo 1 volta al giorno
+tz = pytz.timezone("Europe/Rome")
+now = datetime.now(tz)
+if now.hour == 13 and now.minute in [43,44]:
+    send("✅ <b>Bot V3 FIX - Tutto a 60' - FIXATO</b>\n- No più spam\n- No U19 senza stats\n- 0-0 e 1-0 / 0-1")
 
 while True:
     try:
         tz = pytz.timezone("Europe/Rome")
         now = datetime.now(tz)
 
-        # RESET MEZZANOTTE
-        if now.hour == 0 and now.minute < 3:
+        if now.hour == 0 and now.minute < 2:
             already_sent.clear()
+            save_sent(already_sent)
             schedine_fatte = False
 
-        # --- SCHEDINE ORE 10:00 ---
-        if now.hour == 10 and now.minute == 0 and not schedine_fatte:
-            print("Creo 2 schedine 10:00")
-            fixtures = get_today_fixtures()
-            ns = [f for f in fixtures if f["fixture"]["status"]["short"] == "NS"]
-            
-            if len(ns) >= 6:
-                # Schedina 1 - Quota 1.70 (3 partite)
-                s1 = ns[:3]
-                txt1 = "📋 <b>SCHEDINA 1 - QUOTA 1.70 (0-0 / 1-0)</b>\n"
-                txt1 += "\n".join([f"• {x['teams']['home']['name']} vs {x['teams']['away']['name']} - {x['fixture']['date'][11:16]}" for x in s1])
-                txt1 += "\n\nObiettivo: 0-0 o 1-0"
-                
-                # Schedina 2 - 5/6 partite statistiche
-                s2 = ns[3:9] if len(ns) >= 9 else ns[3:]
-                txt2 = f"📊 <b>SCHEDINA 2 - ANALISI GIORNALIERA ({len(s2)} partite)</b>\n"
-                txt2 += "\n".join([f"• {x['teams']['home']['name']} vs {x['teams']['away']['name']} - {x['fixture']['date'][11:16]} - {x['league']['name']}" for x in s2])
-                txt2 += "\n\nBasata su ultime 5 partite con pochi gol"
-
-                send(txt1)
-                time.sleep(2)
-                send(txt2)
-                schedine_fatte = True
-            else:
-                send(f"⚠️ Oggi solo {len(ns)} partite, poche per le schedine")
-                schedine_fatte = True
-
-        # --- LIVE DAL 60' - 0-0 e 1-0 ---
         lives = get_live()
-        print(f"[{now.strftime('%H:%M:%S')}] Live: {len(lives)} | Inviate: {len(already_sent)}")
+        print(f"[{now.strftime('%H:%M:%S')}] Live: {len(lives)}")
 
         for m in lives:
             fid = m["fixture"]["id"]
@@ -84,46 +71,52 @@ while True:
                 continue
 
             minute = m["fixture"]["status"]["elapsed"] or 0
-            if minute < 60:  # TUTTO A 60' COME HAI DETTO
+            if minute < 60:
+                continue
+
+            league_name = m["league"]["name"]
+            # FILTRO LEGHE SCARSE
+            if "U19" in league_name or "U18" in league_name or "U21" in league_name or "Reserve" in league_name or "Friendly" in league_name:
                 continue
 
             gh = m["goals"]["home"] or 0
             ga = m["goals"]["away"] or 0
-            
-            # NUOVO: 0-0 oppure 1-0 / 0-1
-            is_valid_score = (gh == 0 and ga == 0) or (gh == 1 and ga == 0) or (gh == 0 and ga == 1)
-            if not is_valid_score:
+            if not ((gh==0 and ga==0) or (gh==1 and ga==0) or (gh==0 and ga==1)):
                 continue
 
-            # STATS
             stats = get_stats(fid)
             shots = 0
             corners = 0
             for ts in stats:
                 for s in ts.get("statistics", []):
-                    if "Total Shots" in s["type"] or "Shots on Goal" in s["type"]:
-                        shots += s["value"] or 0
-                    if "Corner" in s["type"]:
-                        corners += s["value"] or 0
+                    t = s.get("type","")
+                    v = s.get("value") or 0
+                    if t in ["Total Shots", "Shots on Goal", "Shots off Goal", "Blocked Shots"]:
+                        shots += v
+                    if "Corner" in t:
+                        corners += v
+
+            # SE NON HA STATS (tipo U19) NON LA MANDIAMO
+            if shots == 0 and corners == 0:
+                print(f"Skip {fid} no stats")
+                continue
 
             home = m["teams"]["home"]["name"]
             away = m["teams"]["away"]["name"]
             score = f"{gh}-{ga}"
-            league = m["league"]["name"]
 
-            # LOGICA CALDA / MORTA dal 60'
             if shots >= 8 and corners >= 6:
-                msg = f"🔥 <b>CALDA {score} al {minute}'</b>\n{home} vs {away}\n{league}\n📊 Tiri: {shots} | Corner: {corners}\nSpingono per il pareggio/gol - perfetta"
+                msg = f"🔥 <b>CALDA {score} al {minute}'</b>\n{home} vs {away}\n{league_name}\n📊 Tiri: {shots} | Corner: {corners}"
             else:
-                msg = f"💀 <b>MORTA {score} al {minute}'</b>\n{home} vs {away}\n{league}\n📊 Tiri: {shots} | Corner: {corners}\nPartita bloccata - buona per 0-0/1-0"
+                msg = f"💀 <b>MORTA {score} al {minute}'</b>\n{home} vs {away}\n{league_name}\n📊 Tiri: {shots} | Corner: {corners}\nBloccata - buona per 0-0/1-0"
 
             send(msg)
             already_sent.add(fid)
-            print(f"Inviata {home}-{away} {score} {minute}'")
+            save_sent(already_sent)
+            print(f"Inviata {home} vs {away}")
             time.sleep(2)
 
         time.sleep(60)
-
     except Exception as e:
-        print(f"ERRORE LOOP: {e}")
+        print(f"ERRORE: {e}")
         time.sleep(30)
