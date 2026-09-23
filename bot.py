@@ -1,3 +1,5 @@
+
+        
 import os, time, requests, json
 from datetime import datetime
 import pytz
@@ -7,37 +9,50 @@ CHAT_ID = os.getenv("CHAT_ID")
 API_KEY = os.getenv("API_FOOTBALL_KEY")
 FILE = "sent.json"
 
+print(f"BOT V6.2 AVVIO - Token ok? {bool(BOT_TOKEN)} - Chat ok? {bool(CHAT_ID)} - Key ok? {bool(API_KEY)}", flush=True)
+
 def load():
     try:
         if os.path.exists(FILE):
             with open(FILE,"r") as f:
                 d=json.load(f)
                 return set(d.get("sent",[])), d.get("scores",{}), set(d.get("seguite",[])), d.get("last_gg",-1)
-    except: pass
+    except Exception as e:
+        print(f"Load err {e}", flush=True)
     return set(), {}, set(), -1
 
 def save(s_set, sc_dict, seg_set, last_gg):
     try:
         with open(FILE,"w") as f:
             json.dump({"sent":list(s_set),"scores":sc_dict,"seguite":list(seg_set),"last_gg":last_gg},f)
-    except: pass
+    except Exception as e:
+        print(f"Save err {e}", flush=True)
 
 sent, last_scores, seguite, last_gg_hour = load()
+# FIX per farlo partire subito dopo deploy
+last_gg_hour = -1
 schedine_fatte = False
+print(f"Caricato: sent={len(sent)} seguite={len(seguite)} last_gg={last_gg_hour}", flush=True)
 
 def tg(text):
     try:
+        if not BOT_TOKEN or not CHAT_ID:
+            print("MANCANO TOKEN/CHAT_ID nelle ENV!", flush=True)
+            return
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=15)
+        r = requests.post(url, data={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=15)
+        print(f"TG inviato: {r.status_code}", flush=True)
     except Exception as e:
-        print(f"Errore TG: {e}")
+        print(f"Errore TG: {e}", flush=True)
 
 def api_get(url):
     h = {"x-apisports-key": API_KEY}
     try:
         r = requests.get(url, headers=h, timeout=20).json()
         return r.get("response", [])
-    except: return []
+    except Exception as e:
+        print(f"API err {url} -> {e}", flush=True)
+        return []
 
 def get_live(): return api_get("https://v3.football.api-sports.io/fixtures?live=all")
 def get_stats(fid): return api_get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
@@ -70,25 +85,26 @@ def get_quote(fid):
 def fmt(m):
     return f"{m['league']['country']} - {m['league']['name']} - {m['teams']['home']['name']} vs {m['teams']['away']['name']}"
 
-print("BOT V6.1 - CON OVER 1.5")
-tg("✅ <b>BOT V6.1 ATTIVO</b>\n- Live Calda/Morta/Corner/Rosso\n- Gol solo se seguita\n- Schedina 10:00 con Over 1.5 (5 vecchie)\n- GG ogni 2h")
+print("BOT V6.2 - CON OVER 1.5 - PRONTO", flush=True)
+tg("✅ <b>BOT V6.2 ATTIVO FIX LOG</b>\nOra i log si vedono\n- Live Calda/Morta/Corner/Rosso\n- Schedina 10:00\n- GG ogni 2h")
 
 while True:
     try:
         tz=pytz.timezone("Europe/Rome")
         now=datetime.now(tz)
+        print(f"Check {now.strftime('%H:%M:%S')} - live da controllare", flush=True)
 
         if now.hour==0 and now.minute<4:
             sent.clear(); last_scores.clear(); seguite.clear()
             save(sent,last_scores,seguite,-1)
             schedine_fatte=False; last_gg_hour=-1
+            print("Reset giornaliero", flush=True)
 
-        # SCHEDINE 10:00 - ENTRAMBE
         if now.hour==10 and now.minute<5 and not schedine_fatte:
+            print("Avvio schedine 10:00", flush=True)
             fixtures=get_today()
             ns=[f for f in fixtures if f["fixture"]["status"]["short"]=="NS"]
             if len(ns)>=3:
-                # SCHEDINA 1 - QUOTA 1.60/1.80
                 quotate=[]
                 for f in ns[:20]:
                     q=get_quote(f["fixture"]["id"])
@@ -100,8 +116,6 @@ while True:
                 txt1="📋 <b>SCHEDINA 1 - QUOTA 1.60/1.80</b>\n\n"
                 for x in s1: txt1+=f"• {fmt(x)} - {x['fixture']['date'][11:16]}\n"
                 tg(txt1); time.sleep(1)
-
-                # SCHEDINA 2 - OVER 1.5 IN BASE ALLE 5 VECCHIE
                 sel=[]
                 tg("⏳ <b>Calcolo Over 1.5 in corso... controllo ultime 5 partite</b>")
                 for f in ns:
@@ -115,7 +129,6 @@ while True:
                         if media>=1.6:
                             sel.append((f,media))
                     except: continue
-
                 if sel:
                     txt2=f"📊 <b>SCHEDINA 2 - OVER 1.5 - {len(sel)} partite (media gol ultime 5 >1.6)</b>\n\n"
                     for x,media in sel:
@@ -125,8 +138,8 @@ while True:
                     tg("📊 <b>SCHEDINA 2 OVER 1.5:</b> Oggi nessuna partita con media >1.6 nelle ultime 5")
             schedine_fatte=True
 
-        # GG OGNI 2 ORE
         if now.minute<4 and now.hour%2==0 and now.hour>=12 and now.hour<=22 and now.hour!=last_gg_hour:
+            print(f"Trigger GG ore {now.hour}", flush=True)
             fixtures=get_today()
             ns=[f for f in fixtures if f["fixture"]["status"]["short"]=="NS"]
             cand=[f for f in ns if not any(x in f["league"]["name"] for x in ["U19","U18","U17","Friendly"])][:10]
@@ -137,8 +150,8 @@ while True:
                 tg(txt)
             last_gg_hour=now.hour; save(sent,last_scores,seguite,last_gg_hour)
 
-        # LIVE
         lives=get_live()
+        print(f"Live trovate: {len(lives)}", flush=True)
         for m in lives:
             fid=str(m["fixture"]["id"])
             minute=m["fixture"]["status"]["elapsed"] or 0
@@ -179,4 +192,4 @@ while True:
             time.sleep(1)
         time.sleep(90)
     except Exception as e:
-        print(f"ERR {e}"); time.sleep(30)
+        print(f"ERR {e}", flush=True); time.sleep(30)
