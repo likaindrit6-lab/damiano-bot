@@ -1,31 +1,28 @@
 import os, time, requests
-TOKEN=os.getenv("TELEGRAM_TOKEN")
-CHAT=os.getenv("CHAT_ID")
-API=os.getenv("API_FOOTBALL_KEY")
 
-def send(m):
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT = os.getenv("CHAT_ID")
+API = os.getenv("API_FOOTBALL_KEY")
+
+print("AVVIO", flush=True)
+
+def send(t):
     try:
-        requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",data={"chat_id":CHAT,"text":m},timeout=10)
-    except: pass
+        requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+        data={"chat_id": CHAT, "text": t}, timeout=10)
+        print(f"inviato: {t}", flush=True)
+    except Exception as e:
+        print(f"errore invio: {e}", flush=True)
 
-send("✅ TEST CONNESSIONE - ARRIVA TUTTO")
+send("✅ BOT PARTITO Dami - se leggi questo Telegram è ok")
 
-h={"x-apisports-key":API}
+h = {"x-apisports-key": API}
 
 while True:
     try:
-        r=requests.get("https://v3.football.api-sports.io/fixtures?live=all",headers=h,timeout=20).json().get("response",[])
-        if not r:
-            send("Sono vivo ma ora non c'è nessuna partita live")
-        else:
-            for x in r[:3]: # ti mando le prime 3 live, qualsiasi risultato
-                mi=x["fixture"]["status"]["elapsed"] or 0
-                home=x["teams"]["home"]["name"]
-                away=x["teams"]["away"]["name"]
-                gh=x["goals"]["home"]
-                ga=x["goals"]["away"]
-                send(f"⚽️ {mi}' {home} {gh}-{ga} {away} - TEST CHE ARRIVA")
+        live = requests.get("https://v3.football.api-sports.io/fixtures?live=all", headers=h, timeout=20).json().get("response",[])
+        print(f"live: {len(live)} partite", flush=True)
         time.sleep(60)
     except Exception as e:
-        send(f"Errore: {e}")
+        print(f"errore loop: {e}", flush=True)
         time.sleep(30)
