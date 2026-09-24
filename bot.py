@@ -39,7 +39,18 @@ def get_avg(team_id):
     except Exception:
         return 0
 
-send("✅ BOT DAMI V13 FIX - RIPARATO\nCalda 4 tiri | Morta 2 tiri | Rosso | Schedina 10:00 quota 1.80 | Goal ogni 2h")
+def calcola_probabilita(sot, minute):
+    # formula V14 semplice: più tiri + minuto avanzato = più probabile gol
+    base = sot * 18
+    if minute >= 30:
+        base += 10
+    if minute >= 38:
+        base += 8
+    # cap
+    prob = min(93, max(12, int(base)))
+    return prob
+
+send("✅ BOT DAMI V13.1 - CON PROBABILITA'\nCalda 4 tiri + % gol | Morta 2 tiri | Rosso | Schedina 10:00 | Goal ogni 2h")
 
 inviate = set()
 rosso = set()
@@ -81,12 +92,13 @@ while True:
                     continue
 
                 sot = get_sot(fid)
+                prob = calcola_probabilita(sot, minute)
 
                 if sot >= 4:
-                    send(f"🔥 *CALDA {sot} TIRI {minute}'*\n*{country} {league}*\n{home} vs {away} ({goals_home}-{goals_away}) | Tiri: {sot}")
+                    send(f"🔥 *CALDA {sot} TIRI {minute}'*\n*{country} {league}*\n{home} vs {away} ({goals_home}-{goals_away}) | Tiri: {sot}\n⚽️ *Prob gol 15min: {prob}%*")
                     inviate.add(fid)
                 elif sot <= 2 and minute >= 35 and sot > 0:
-                    send(f"💀 *MORTA {sot} TIRI {minute}'*\n*{country} {league}*\n{home} vs {away}")
+                    send(f"💀 *MORTA {sot} TIRI {minute}'*\n*{country} {league}*\n{home} vs {away}\n⚽️ *Prob gol 15min: {prob}%*")
                     inviate.add(fid)
 
             except Exception as e:
