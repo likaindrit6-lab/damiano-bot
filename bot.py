@@ -72,7 +72,6 @@ while True:
             stats = get_stats(fid)
             time.sleep(0.6)
 
-            # --- MODIFICHE DAMI SOLO QUI ---
             if 30 <= el <= 45 and stats["on"] >= 4 and f"calda-{fid}" not in inviate:
                 send(f"🔥 CALDA {el}' - 4+ tiri in porta\n{casa} vs {fuori}\n🏆 {league} - {country}")
                 inviate.add(f"calda-{fid}")
@@ -82,12 +81,10 @@ while True:
             if 30 <= el <= 45 and stats["on"] <= 2 and f"morta-{fid}" not in inviate:
                 send(f"🧊 MORTA {el}' - {stats['on']} tiri\n{casa} vs {fuori}\n🏆 {league} - {country}")
                 inviate.add(f"morta-{fid}")
-            # ROSSO IDENTICO
             if el <= 60 and stats["red"] >= 1 and f"rosso-{fid}" not in inviate:
                 send(f"🟥 ROSSO al {el}'\n{casa} vs {fuori}\n🏆 {league} - {country}")
                 inviate.add(f"rosso-{fid}")
 
-        # SCHEDINA 10:00 - QUOTA 1.60/1.70
         now = datetime.now()
         if now.hour == 10 and now.minute < 5:
             key = f"quota-{now.strftime('%Y-%m-%d')}"
@@ -100,7 +97,6 @@ while True:
                     txt+="\nQuota finale: ~1.70"
                     send(txt)
                     inviate.add(key)
-            # SECONDA SCHEDINA 10:00 - OVER MEDIA >=2.0
             key2 = f"over-media-{now.strftime('%Y-%m-%d')}"
             if key2 not in inviate:
                 tod = get_today()
@@ -122,13 +118,13 @@ while True:
                     send("📊 SCHEDINA OVER 1.5 - Media >=2.0 ultime 5\n\n" + "\n\n".join(over_list[:8]))
                 inviate.add(key2)
 
-        # LISTA GOL GOL ogni 2 ore (7200 sec)
+        # LISTA GOL GOL ogni 2 ore - MODIFICATO A 40% E 40 PARTITE
         if time.time() - ultimo_over_check > 7200:
             print("Check lista GOL GOL 2H...", flush=True)
             ultimo_over_check = time.time()
             tod = get_today()
             lista=[]
-            for f in tod[:15]:
+            for f in tod[:40]:
                 if f["fixture"]["status"]["short"]!="NS": continue
                 try:
                     time.sleep(0.8)
@@ -147,7 +143,7 @@ while True:
                         if gh>0 and ga>0: gg2+=1
                     media=(tot1+tot2)/10
                     perc=((gg1+gg2)/10)*100
-                    if perc>=60:
+                    if perc>=40:
                         lista.append((perc, f"{f['teams']['home']['name']} vs {f['teams']['away']['name']} - GG {perc:.0f}% media {media:.2f}\n 🏆 {f['league']['name']} - {f['league']['country']}"))
                 except Exception as e:
                     print(f"Errore GG {e}", flush=True)
@@ -155,7 +151,7 @@ while True:
             if lista:
                 send("⚽ LISTA GOL GOL - Top 3 ogni 2H\n\n" + "\n\n".join([x[1] for x in lista[:3]]))
             else:
-                send("⚽ LISTA GOL GOL - Nessuna >60% al momento")
+                send("⚽ LISTA GOL GOL - Nessuna >40% al momento")
 
         print("Sleep 60s", flush=True)
         time.sleep(60)
