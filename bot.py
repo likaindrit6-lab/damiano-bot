@@ -1,152 +1,94 @@
 
-import os, requests, time, random
+import os, time, requests, traceback
 from datetime import datetime
+import pytz
 
-TOKEN = os.getenv("BOT_TOKEN")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-API_KEY = os.getenv("API_FOOTBALL")
-HEAD = {"x-apisports-key": API_KEY}
+API_KEY = os.getenv("API_FOOTBALL_KEY")
+ROMA = pytz.timezone('Europe/Rome')
 
-ID = random.randint(1000,9999)
-print(f"=== BOT DAMI {ID} AVVIO V6 ===", flush=True)
+def log(msg):
+    print(f"[{datetime.now(ROMA).strftime('%H:%M:%S')}] {msg}")
 
-try:
-    requests.post(f"https://api.telegram.org/bot{TOKEN}/deleteWebhook", timeout=10)
-except:
-    pass
-
-inviate = set()
-
-def send(t):
+def send(msg):
     try:
-        requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": t}, timeout=20)
+        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+                      data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"}, timeout=15)
     except Exception as e:
-        print(f"Errore send {e}", flush=True)
+        log(f"Errore invio TG: {e}")
 
-def get_stats(fid):
-    try:
-        r = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}", headers=HEAD, timeout=15).json()
-        d = {"on":0,"corn":0,"red":0}
-        for tm in r.get("response", []):
-            for s in tm.get("statistics", []):
-                if s["value"] is None: continue
-                if "Shots on Goal" in s["type"]: d["on"] += int(s["value"])
-                if "Corner" in s["type"]: d["corn"] += int(s["value"])
-                if "Red" in s["type"]: d["red"] += int(s["value"])
-        return d
-    except: return {"on":0,"corn":0,"red":0}
+log("=== BOT DAMI V10 COMPLETO AVVIATO ===")
+send("✅ <b>BOT DAMI V10 COMPLETO PARTITO</b>\nOra controllo ogni 60 sec - Anti-crash ON")
 
-def get_today():
-    try:
-        today = datetime.now().strftime("%Y-%m-%d")
-        r = requests.get(f"https://v3.football.api-sports.io/fixtures?date={today}", headers=HEAD, timeout=15).json()
-        return r.get("response", [])
-    except: return []
-
-send(f"✅ BOT DAMI {ID} V6 PARTITO - FINALE")
-
-ultimo_over_check = time.time()
-ultimo_riepilogo = time.time()
+headers = {"x-apisports-key": API_KEY}
 
 while True:
     try:
-        live = requests.get("https://v3.football.api-sports.io/fixtures?live=all", headers=HEAD, timeout=15).json().get("response", [])
-        calde_live = []
-        fredde_count = 0
+        # 1. Prendo live
+        r = requests.get("https://v3.football.api-sports.io/fixtures?live=all",
+                         headers=headers, timeout=20)
+        data = r.json()
+        lives = data.get("response", [])
+        log(f"Live trovate: {len(lives)}")
 
-        for m in live:
-            el = m["fixture"]["status"]["elapsed"] or 0
-            if el < 2 or m["goals"]["home"]!=0 or m["goals"]["away"]!=0: continue
-            fid = m["fixture"]["id"]
-            casa = m["teams"]["home"]["name"]
-            fuori = m["teams"]["away"]["name"]
-            league = m["league"]["name"]
-            country = m["league"]["country"]
-            stats = get_stats(fid)
-            time.sleep(0.6)
+        if len(lives) == 0:
+            time.sleep(60)
+            continue
 
-            if 30 <= el <= 45 and stats["on"] >= 4 and f"calda-{fid}" not in inviate:
-                send(f"🔥 CALDA {el}' - 4+ tiri\n{casa} vs {fuori}\n🏆 {league} - {country}")
-                inviate.add(f"calda-{fid}")
-            if 25 <= el <= 45 and stats["corn"] >= 4 and f"corn-{fid}" not in inviate:
-                send(f"🚩 CORNER 4 al {el}'\n{casa} vs {fuori}\n🏆 {league} - {country}")
-                inviate.add(f"corn-{fid}")
-            if 30 <= el <= 45 and stats["on"] <= 2 and f"morta-{fid}" not in inviate:
-                send(f"🧊 MORTA {el}' - {stats['on']} tiri\n{casa} vs {fuori}\n🏆 {league} - {country}")
-                inviate.add(f"morta-{fid}")
-            if el <= 60 and stats["red"] >= 1 and f"rosso-{fid}" not in inviate:
-                send(f"🟥 ROSSO al {el}'\n{casa} vs {fuori}\n🏆 {league} - {country}")
-                inviate.add(f"rosso-{fid}")
+        for match in lives:
+            try:
+                fixture = match["fixture"]
+                goals = match["goals"]
+                minuto = fixture["status"]["elapsed"] or 0
+                if goals["home"]!= 0 or goals["away"]!= 0: continue
+                if minuto < 20 or minuto > 85: continue
 
-            if 20 <= el <= 55:
-                if stats["on"] >= 3 or stats["corn"] >= 4:
-                    calde_live.append(f"🔥 {casa} vs {fuori} {el}' C{stats['corn']} T{stats['on']}")
-                elif stats["on"] <= 2:
-                    fredde_count += 1
+                fixture_id = fixture["id"]
+                home = match["teams"]["home"]["name"]
+                away = match["teams"]["away"]["name"]
 
-        if time.time() - ultimo_riepilogo > 600:
-            ultimo_riepilogo = time.time()
-            tot_check = 0
-            for x in live:
-                e = x["fixture"]["status"]["elapsed"] or 0
-                if 20 <= e <= 55 and x["goals"]["home"]==0 and x["goals"]["away"]==0: tot_check += 1
-            if tot_check > 0:
-                if calde_live:
-                    send(f"⚽ LIVE ORA: 🔥 {len(calde_live)} CALDE / 🥶 {fredde_count} FREDDE\n\n" + "\n".join(calde_live[:7]))
-                else:
-                    send(f"🥶 LIVE ORA: 0 CALDE / {fredde_count} FREDDE su {tot_check} partite 0-0")
+                # 2. Stats
+                s = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fixture_id}",
+                                 headers=headers, timeout=15).json()
 
-        # SCHEDINA 10:00 QUOTA 1.70/1.80
-        now = datetime.now()
-        if now.hour == 10 and now.minute < 10:
-            key = f"quota-{now.strftime('%Y-%m-%d')}"
-            if key not in inviate:
-                tod = get_today()
-                if len(tod) >= 3:
-                    txt = "💰 SCHEDINA 10:00 - QUOTA 1.70/1.80\n\n"
-                    for i,f in enumerate(tod[:3],1):
-                        txt += f"{i}. {f['teams']['home']['name']} vs {f['teams']['away']['name']} - 1X\n"
-                    send(txt)
-                    inviate.add(key)
+                if not s.get("response"): continue
 
-        # GOL GOL + OVER OGNI 2 ORE
-        if time.time() - ultimo_over_check > 7200:
-            ultimo_over_check = time.time()
-            tod = get_today()
-            lista_gg = []
-            lista_over = []
-            for f in tod[:50]:
-                if f["fixture"]["status"]["short"]!="NS": continue
-                try:
-                    time.sleep(0.8)
-                    r1 = requests.get(f"https://v3.football.api-sports.io/fixtures?team={f['teams']['home']['id']}&last=5", headers=HEAD, timeout=15).json()
-                    gg1=0; tot1=0
-                    for x in r1.get("response",[]):
-                        gh=x["goals"]["home"]; ga=x["goals"]["away"]
-                        tot1+=gh+ga
-                        if gh>0 and ga>0: gg1+=1
-                    time.sleep(0.8)
-                    r2 = requests.get(f"https://v3.football.api-sports.io/fixtures?team={f['teams']['away']['id']}&last=5", headers=HEAD, timeout=15).json()
-                    gg2=0; tot2=0
-                    for x in r2.get("response",[]):
-                        gh=x["goals"]["home"]; ga=x["goals"]["away"]
-                        tot2+=gh+ga
-                        if gh>0 and ga>0: gg2+=1
-                    media=(tot1+tot2)/10
-                    perc=((gg1+gg2)/10)*100
-                    if perc>=40:
-                        lista_gg.append((perc, f"{f['teams']['home']['name']} vs {f['teams']['away']['name']} - GG {perc:.0f}% media {media:.2f}"))
-                    if media >= 2.0:
-                        lista_over.append((media, f"{f['teams']['home']['name']} vs {f['teams']['away']['name']} - media {media:.2f}"))
-                except: pass
-            lista_gg.sort(key=lambda x: x[0], reverse=True)
-            if lista_gg:
-                send("⚽ GOL GOL - Top 3 >40%\n\n" + "\n\n".join([x[1] for x in lista_gg[:3]]))
-            lista_over.sort(key=lambda x: x[0], reverse=True)
-            if lista_over:
-                send("📊 OVER 1.5 - Media >=2.0\n\n" + "\n\n".join([x[1] for x in lista_over[:5]]))
+                # Somma tiri, corner, attacchi pericolosi
+                home_stats = s["response"][0]["statistics"]
+                away_stats = s["response"][1]["statistics"]
 
+                def get_stat(arr, nome):
+                    for x in arr:
+                        if nome in x["type"]:
+                            return x["value"] or 0
+                    return 0
+
+                tiri_home = get_stat(home_stats, "Shots on Goal")
+                tiri_away = get_stat(away_stats, "Shots on Goal")
+                tiri = tiri_home + tiri_away
+
+                corner_home = get_stat(home_stats, "Corner")
+                corner_away = get_stat(away_stats, "Corner")
+                corner = corner_home + corner_away
+
+                # LOGICA TUA
+                if minuto >= 30 and minuto <= 55:
+                    if tiri >= 4 and corner >= 4:
+                        send(f"🔥 <b>CALDA {minuto}'</b>\n{home} - {away}\nTiri: {tiri} | Corner: {corner}\nAncora 0-0")
+                    elif tiri <= 1 and corner <= 2:
+                        send(f"❄️ <b>FREDDA {minuto}'</b>\n{home} - {away}\nTiri: {tiri} | Corner: {corner} - Morta")
+
+                time.sleep(1) # per non bruciare API
+
+            except Exception as e:
+                log(f"Errore su singola partita: {e}")
+                continue
+
+        log("Giro finito, aspetto 60 sec")
         time.sleep(60)
+
     except Exception as e:
-        print(f"ERRORE LOOP: {e}", flush=True)
-        time.sleep(60)
+        log(f"⚠️ ERRORE GLOBALE MA NON MI SPENGO:\n{traceback.format_exc()}")
+        send(f"⚠️ Errore globale ma continuo a girare:\n{e}")
+        time.sleep(30)
