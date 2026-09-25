@@ -1,89 +1,64 @@
-import os, time, threading, requests
+import os, time, requests
 from datetime import datetime
-from flask import Flask
 
-app = Flask(__name__)
-@app.route('/')
-def home(): return "DAMI BOT V23 CALCIO LIVE"
+# --- CONFIG CHE CAMBI TU ---
+TOP_ONLY = False  # False adesso = TUTTO IL MONDO, True dopo = solo top
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+API_KEY = os.getenv("API_FOOTBALL_KEY")
 
-TOKEN = (os.getenv("TELEGRAM_TOKEN") or os.getenv("BOT_TOKEN") or "").strip()
-CHAT = (os.getenv("CHAT_ID") or "606420824").strip()
-API = (os.getenv("API_FOOTBALL_KEY") or "").strip()
-HEAD = {"x-apisports-key": API}
-BASE = "https://v3.football.api-sports.io"
+TOP_LEAGUES = [135, 39, 140, 78, 61, 2, 3] # Serie A, Premier, Liga, Bundesliga, Ligue1, Champions, etc.
 
-def send(t):
+def send_telegram(text):
+    requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", 
+                  json={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"})
+
+def get_live():
+    # QUESTA E' LA FIX - live=all invece di date
+    url = "https://v3.football.api-sports.io/fixtures?live=all"
+    headers = {"x-apisports-key": API_KEY}
+    r = requests.get(url, headers=headers, timeout=20).json()
+    return r.get("response", [])
+
+def calc_percentuale(fixture):
+    # la tua percentuale gol come volevi tu
+    stats = fixture.get("statistics", []) # qui poi leggi angoli/tiri
+    perc = 50
+    # logica semplice per ora - poi la miglioriamo con angoli
+    if fixture["goals"]["home"] == 0 and fixture["goals"]["away"] == 0:
+        perc += 15 # 0-0 caldo
+    if fixture["fixture"]["status"]["elapsed"] >= 30:
+        perc += 15
+    # se tanti angoli +20 ecc
+    return min(perc, 92)
+
+# LOOP PRINCIPALE - OGNI 3 MINUTI, NON OGNI MINUTO
+while True:
     try:
-        r = requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": CHAT, "text": t}, timeout=20)
-        print(f"SEND {r.status_code}", flush=True)
+        live_games = get_live()
+        print(f"VISTO {len(live_games)} partite live") # solo nei log, non su Telegram!
+
+        for game in live_games:
+            league_id = game["league"]["id"]
+            if TOP_ONLY and league_id not in TOP_LEAGUES:
+                continue
+
+            minute = game["fixture"]["status"]["elapsed"] or 0
+            if minute > 75: # dopo 75' basta come mi hai detto
+                continue
+
+            perc = calc_percentuale(game)
+            if perc >= 65: # solo se caldo 65-70%
+                country = game["league"]["country"]
+                league = game["league"]["name"]
+                home = game["teams"]["home"]["name"]
+                away = game["teams"]["away"]["name"]
+                score = f"{game['goals']['home']}-{game['goals']['away']}"
+                
+                msg = f"🔥 {minute}' - {country} {league}\n{home} {score} {away}\nPercentuale gol: {perc}% - sta spingendo"
+                send_telegram(msg)
+
     except Exception as e:
-        print(f"SEND ERR {e}", flush=True)
+        print(f"ERRORE {e}")
 
-def get_today_fixtures():
-    try:
-        today = datetime.now().strftime("%Y-%m-%d")
-        resp = requests.get(f"{BASE}/fixtures?date={today}", headers=HEAD, timeout=20).json()
-        return resp.get("response", [])
-    except Exception as e:
-        print(f"FIXT ERR {e}", flush=True)
-        return []
-
-def bot_loop():
-    print("BOT LOOP PARTITO - CALCIO", flush=True)
-    time.sleep(2)
-    send(f"✅ BOT DAMI CALCIO ON - {datetime.now().strftime('%H:%M:%S')} - base VIVO attiva")
-
-    # LISTA GIORNO - Manda subito qualcosa anche se sera
-    fixtures = get_today_fixtures()
-    print(f"Fixtures oggi: {len(fixtures)}", flush=True)
-    
-    lista = []
-    for f in fixtures[:60]:
-        try:
-            ora = f["fixture"]["date"][11:16]
-            home = f["teams"]["home"]["name"][:20]
-            away = f["teams"]["away"]["name"][:20]
-            lista.append(f"• {ora} {home} vs {away} - NO 0-0 | Over 1.5")
-        except: continue
-    
-    if not lista:
-        lista = ["• Nessuna partita rimasta stasera - lista completa domani alle 10:00"]
-
-    send(f"📋 CALCIO OGGI - NO 0-0 ({len(lista)})\n\n" + "\n".join(lista[:45]))
-
-    c = 0
-    while True:
-        try:
-            c += 1
-            print(f"VIVO {c} - {datetime.now().strftime('%H:%M:%S')} - fixtures:{len(fixtures)}", flush=True)
-            
-            # Ogni 10 minuti avviso che è vivo
-            if c % 10 == 0:
-                send(f"🔄 Bot calcio vivo {datetime.now().strftime('%H:%M:%S')} - controllo live attivo")
-
-            # Alle 10:00 rimanda lista del giorno
-            now = datetime.now()
-            if now.hour == 10 and now.minute == 0:
-                fixtures = get_today_fixtures()
-                lista = []
-                for f in fixtures[:80]:
-                    try:
-                        ora = f["fixture"]["date"][11:16]
-                        home = f["teams"]["home"]["name"]
-                        away = f["teams"]["away"]["name"]
-                        lista.append(f"• {ora} {home} vs {away}")
-                    except: continue
-                if lista:
-                    send(f"📋 LISTA 10:00 - {len(lista)} partite\n\n" + "\n".join(lista[:50]))
-                time.sleep(61)
-
-            time.sleep(60)
-        except Exception as e:
-            print(f"LOOP ERR {e}", flush=True)
-            time.sleep(60)
-
-threading.Thread(target=bot_loop, daemon=True).start()
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    time.sleep(180) # 3 minuti, così non finisci le 7200 chiamate
