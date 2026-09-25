@@ -1,92 +1,44 @@
-import os, time, requests
+def invia_schedina_10():
+    fixtures = get_today_fixtures()
+    filtrate = []
+    analizzate = 0
 
-TOKEN = (os.getenv("TELEGRAM_TOKEN") or os.getenv("BOT_TOKEN") or "").strip()
-CHAT = (os.getenv("CHAT_ID") or "606420824").strip()
-API = os.getenv("API_FOOTBALL_KEY","").strip()
-HEAD = {"x-apisports-key": API}
+    for f in fixtures:
+        if f["fixture"]["status"]["short"] != "NS": continue
+        analizzate += 1
+        try:
+            mh = get_media_gol_ultime_5(f["teams"]["home"]["id"])
+            ma = get_media_gol_ultime_5(f["teams"]["away"]["id"])
+            media = (mh + ma) / 2
+            if media >= 2.0:
+                filtrate.append({
+                    "match": f"{f['teams']['home']['name']} vs {f['teams']['away']['name']}",
+                    "lega": f['league']['name'],
+                    "media": round(media,1)
+                })
+            time.sleep(0.35)
+        except: continue
 
-def send(t):
-    try:
-        requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": CHAT, "text": t, "parse_mode":"Markdown"}, timeout=15)
-    except: pass
+    if not filtrate:
+        send(f"🎫 SCHEDINA 10:00: 0 partite con media >=2.0 su {analizzate} di oggi")
+        return
 
-def get_stats(fid):
-    try:
-        r = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}", headers=HEAD, timeout=15).json()
-        sot=shots=dang=corners=att=0
-        for tm in r.get("response", []):
-            for st in tm.get("statistics", []):
-                if st["type"]=="Shots on Goal": sot+=st["value"] or 0
-                if st["type"]=="Total Shots": shots+=st["value"] or 0
-                if st["type"]=="Attacks": att+=st["value"] or 0
-                if st["type"]=="Dangerous Attacks": dang+=st["value"] or 0
-                if st["type"]=="Corner Kicks": corners+=st["value"] or 0
-        final_att = dang if dang>0 else att
-        return sot, shots, final_att, corners
-    except: return 0,0,0,0
+    # MESSAGGIO 1: LISTA COMPLETA DI TUTTE LE ODIERNE FILTRATE
+    txt1 = f"📋 *TUTTE LE PARTITE ODIERNE FILTRATE*\n*{datetime.now().strftime('%d/%m')}* - Analizzate {analizzate} - Trovate {len(filtrate)} con media >=2.0\n\n"
+    for i, p in enumerate(filtrate, 1):
+        txt1 += f"{i}. {p['match']} - {p['lega']} (Media {p['media']})\n"
+        # Telegram limite 4096 caratteri, spezza se troppa roba
+        if len(txt1) > 3500:
+            send(txt1)
+            txt1 = "📋 *CONTINUA LISTA:*\n\n"
+    
+    if txt1.strip() != "📋 *CONTINUA LISTA:*\n\n":
+        send(txt1)
 
-def get_corner_minuti(fid):
-    try:
-        ev=requests.get(f"https://v3.football.api-sports.io/fixtures/events?fixture={fid}", headers=HEAD, timeout=10).json()
-        minuti=[]
-        for e in ev.get("response", []):
-            if e.get("detail")=="Corner Kick" or e["type"]=="Corner":
-                minuti.append(f"{e['time']['elapsed']}'")
-        return minuti
-    except: return []
-
-def calcola_prob(sot, shots, dang, minute):
-    prob = sot*12 + shots*2 + dang*0.7
-    if minute >= 60: prob+=10
-    if minute >= 75: prob+=12
-    return min(94, max(10, int(prob)))
-
-send("✅ BOT DAMI V13.4 LIVE - % GOL + CORNER ATTIVA")
-
-inviate=set()
-rosso=set()
-
-while True:
-    try:
-        live=requests.get("https://v3.football.api-sports.io/fixtures?live=all", headers=HEAD, timeout=20).json().get("response", [])
-        for m in live:
-            fid=m["fixture"]["id"]
-            minute=m["fixture"]["status"]["elapsed"] or 0
-            if minute==0 or minute>90: continue
-            home=m["teams"]["home"]["name"]; away=m["teams"]["away"]["name"]
-            country=m["league"]["country"]; league=m["league"]["name"]
-            gh=m["goals"]["home"]; ga=m["goals"]["away"]
-
-            if fid not in rosso:
-                try:
-                    ev=requests.get(f"https://v3.football.api-sports.io/fixtures/events?fixture={fid}", headers=HEAD, timeout=10).json()
-                    for e in ev.get("response", []):
-                        if e["type"]=="Card" and e["detail"]=="Red Card":
-                            send(f"🟥 *ROSSO {minute}'*\n*{country} {league}*\n{home} vs {away} ({gh}-{ga})")
-                            rosso.add(fid)
-                except: pass
-
-            sot, shots, dang, corners = get_stats(fid)
-            prob = calcola_prob(sot, shots, dang, minute)
-
-            key = f"{fid}_{minute//15}"
-            if prob >= 70 and key not in inviate:
-                if sot >=3:
-                    c_min = get_corner_minuti(fid)
-                    c_txt = f"Corner: {corners}"
-                    if c_min:
-                        c_txt += f" ({', '.join(c_min[-5:])})"
-                    send(f"⚽️ *{minute}' {prob}% GOL*\n*{country} {league}*\n{home} vs {away} ({gh}-{ga})\nTiri: {sot} | Tot tiri: {shots} | Att: {dang} | {c_txt}")
-                    inviate.add(key)
-            
-            if minute <=45 and fid not in inviate:
-                if sot>=4:
-                    send(f"🔥 *CALDA {sot} TIRI {minute}' - {prob}% GOL*\n*{country} {league}*\n{home} vs {away}")
-                    inviate.add(fid)
-                elif sot<=2 and minute>=35 and sot>0:
-                    send(f"💀 *MORTA {sot} TIRI {minute}' - {prob}% GOL*\n*{country} {league}*\n{home} vs {away}")
-                    inviate.add(fid)
-
-        time.sleep(60)
-    except Exception as e:
-        print(e); time.sleep(60)
+    # MESSAGGIO 2: SCHEDINA DA 5-6 PIU' FACILI PER QUOTA 1.8
+    schedina = filtrate[:6]
+    txt2 = f"🎫 *SCHEDINA 10:00 - QUOTA 1.8*\nFiltro: ultime 5 media >=2.0 gol\n\n"
+    for i, p in enumerate(schedina, 1):
+        txt2 += f"{i}. {p['match']} ({p['media']} gol)\n"
+    txt2 += f"\nQuota target 1.8 | Selezionate {len(schedina)} su {len(filtrate)} filtrate"
+    send(txt2)
