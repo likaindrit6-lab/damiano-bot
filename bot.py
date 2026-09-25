@@ -1,5 +1,4 @@
 import os, time, requests
-from datetime import datetime
 
 TOKEN = (os.getenv("TELEGRAM_TOKEN") or os.getenv("BOT_TOKEN") or "").strip()
 CHAT = (os.getenv("CHAT_ID") or "606420824").strip()
@@ -14,14 +13,27 @@ def send(t):
 def get_stats(fid):
     try:
         r = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}", headers=HEAD, timeout=15).json()
-        sot=shots=dang=0
+        sot=shots=dang=corners=att=0
         for tm in r.get("response", []):
             for st in tm.get("statistics", []):
                 if st["type"]=="Shots on Goal": sot+=st["value"] or 0
                 if st["type"]=="Total Shots": shots+=st["value"] or 0
+                if st["type"]=="Attacks": att+=st["value"] or 0
                 if st["type"]=="Dangerous Attacks": dang+=st["value"] or 0
-        return sot, shots, dang
-    except: return 0,0,0
+                if st["type"]=="Corner Kicks": corners+=st["value"] or 0
+        final_att = dang if dang>0 else att
+        return sot, shots, final_att, corners
+    except: return 0,0,0,0
+
+def get_corner_minuti(fid):
+    try:
+        ev=requests.get(f"https://v3.football.api-sports.io/fixtures/events?fixture={fid}", headers=HEAD, timeout=10).json()
+        minuti=[]
+        for e in ev.get("response", []):
+            if e.get("detail")=="Corner Kick" or e["type"]=="Corner":
+                minuti.append(f"{e['time']['elapsed']}'")
+        return minuti
+    except: return []
 
 def calcola_prob(sot, shots, dang, minute):
     prob = sot*12 + shots*2 + dang*0.7
@@ -29,7 +41,7 @@ def calcola_prob(sot, shots, dang, minute):
     if minute >= 75: prob+=12
     return min(94, max(10, int(prob)))
 
-send("✅ BOT DAMI V13.4 LIVE - % GOL 0'-90' ATTIVA")
+send("✅ BOT DAMI V13.4 LIVE - % GOL + CORNER ATTIVA")
 
 inviate=set()
 rosso=set()
@@ -45,7 +57,6 @@ while True:
             country=m["league"]["country"]; league=m["league"]["name"]
             gh=m["goals"]["home"]; ga=m["goals"]["away"]
 
-            # ROSSO sempre 0-90
             if fid not in rosso:
                 try:
                     ev=requests.get(f"https://v3.football.api-sports.io/fixtures/events?fixture={fid}", headers=HEAD, timeout=10).json()
@@ -55,17 +66,19 @@ while True:
                             rosso.add(fid)
                 except: pass
 
-            sot, shots, dang = get_stats(fid)
+            sot, shots, dang, corners = get_stats(fid)
             prob = calcola_prob(sot, shots, dang, minute)
 
-            # DA 0 A 90 - QUELLO CHE VOLEVI TU
-            key = f"{fid}_{minute//15}" # manda ogni 15 min se prob alta
+            key = f"{fid}_{minute//15}"
             if prob >= 70 and key not in inviate:
-                if sot >=3: # solo se sta tirando
-                    send(f"⚽️ *{minute}' {prob}% GOL*\n*{country} {league}*\n{home} vs {away} ({gh}-{ga})\nTiri: {sot} | Tot tiri: {shots} | Att: {dang}")
+                if sot >=3:
+                    c_min = get_corner_minuti(fid)
+                    c_txt = f"Corner: {corners}"
+                    if c_min:
+                        c_txt += f" ({', '.join(c_min[-5:])})"
+                    send(f"⚽️ *{minute}' {prob}% GOL*\n*{country} {league}*\n{home} vs {away} ({gh}-{ga})\nTiri: {sot} | Tot tiri: {shots} | Att: {dang} | {c_txt}")
                     inviate.add(key)
             
-            # CALDA / MORTA primo tempo come prima
             if minute <=45 and fid not in inviate:
                 if sot>=4:
                     send(f"🔥 *CALDA {sot} TIRI {minute}' - {prob}% GOL*\n*{country} {league}*\n{home} vs {away}")
