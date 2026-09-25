@@ -1,14 +1,4 @@
 import os, time, requests
-from flask import Flask
-import threading
-
-# FIX RENDER OBBLIGATORIO SENNO' DA STATUS 1
-app = Flask(__name__)
-@app.route('/')
-def home(): return "OK"
-def run_web():
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-threading.Thread(target=run_web, daemon=True).start()
 
 TOKEN = (os.getenv("TELEGRAM_TOKEN") or os.getenv("BOT_TOKEN") or "").strip()
 CHAT = (os.getenv("CHAT_ID") or "606420824").strip()
@@ -40,7 +30,7 @@ def get_corner_minuti(fid):
         ev=requests.get(f"https://v3.football.api-sports.io/fixtures/events?fixture={fid}", headers=HEAD, timeout=10).json()
         minuti=[]
         for e in ev.get("response", []):
-            if e.get("detail")=="Corner Kick" or e["type"]=="Corner":
+            if "Corner" in str(e.get("detail","")):
                 minuti.append(f"{e['time']['elapsed']}'")
         return minuti
     except: return []
@@ -51,7 +41,7 @@ def calcola_prob(sot, shots, dang, minute):
     if minute >= 75: prob+=12
     return min(94, max(10, int(prob)))
 
-send("BOT DAMI V13.4 ORIGINALE RIPARTITO")
+send("BOT DAMI V13.4 RIPARTITO")
 
 inviate=set()
 rosso=set()
@@ -84,9 +74,8 @@ while True:
                 if sot >=3:
                     c_min = get_corner_minuti(fid)
                     c_txt = f"Corner: {corners}"
-                    if c_min:
-                        c_txt += f" ({', '.join(c_min[-5:])})"
-                    send(f"{minute}' {prob}% GOL {country} {league} {home} vs {away} ({gh}-{ga}) Tiri: {sot} | Tot tiri: {shots} | Att: {dang} | {c_txt}")
+                    if c_min: c_txt += f" ({', '.join(c_min[-5:])})"
+                    send(f"{minute}' {prob}% GOL {country} {league} {home} vs {away} ({gh}-{ga}) Tiri: {sot} | Tot: {shots} | Att: {dang} | {c_txt}")
                     inviate.add(key)
             
             if minute <=45 and fid not in inviate:
