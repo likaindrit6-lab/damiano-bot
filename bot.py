@@ -11,6 +11,14 @@ def send(t):
         requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": CHAT, "text": t, "parse_mode": "Markdown"}, timeout=15)
     except: pass
 
+# --- SOLO QUESTO AGGIUNTO - ORARIO 08:00 -> 02:00 ---
+def is_orario_attivo():
+    h = datetime.now().hour
+    if h >= 8: return True   # 08:00 -> 23:59
+    if h < 2: return True    # 00:00 -> 01:59
+    return False             # 02:00 -> 07:59 DORME
+# --- FINE ORARIO ---
+
 def get_stats(fid):
     try:
         r = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}", headers=HEAD, timeout=15).json()
@@ -36,49 +44,38 @@ def calcola_prob(sot, shots, dang, minute):
     if minute >= 75: prob+=12
     return min(94, max(10, int(prob)))
 
-# --- NUOVO BLOCCO 10:00 CHE MI HAI CHIESTO TU ---
 def get_liste_10():
     today = datetime.now().strftime("%Y-%m-%d")
     try:
         odds_data = requests.get(f"https://v3.football.api-sports.io/odds?date={today}", headers=HEAD, timeout=25).json().get("response",[])
     except: return None, None, None
-
     lista_over15 = []
     lista_corner65 = []
-    picks_sicuri = [] # per schedina 1.80 totale
-
+    picks_sicuri = []
     for f in odds_data:
         try:
-            fixture_id = f["fixture"]["id"]
             home = f["teams"]["home"]["name"]
             away = f["teams"]["away"]["name"]
             league = f["league"]["name"]
             ora = f["fixture"]["date"][11:16]
             nome = f"{ora} {home} vs {away} ({league})"
-
             for book in f.get("bookmakers",[]):
                 for bet in book.get("bets",[]):
                     bname = bet.get("name","").lower()
                     bid = bet.get("id",0)
                     for v in bet.get("values",[]):
                         val = v["value"]; odd = float(v["odd"])
-                        # Over 1.5 Gol - Bet 5
                         if bid==5 and "Over 1.5" in val and odd <= 1.40:
                             lista_over15.append(f"• {nome} @ {odd}")
                             if 1.05 <= odd <= 1.30:
                                 picks_sicuri.append({"txt": f"{home} vs {away} Over 1.5 @ {odd}", "q": odd})
-                        # Over 6.5 Corner - di solito bet 6 o 45 o nome contiene corner
                         if "corner" in bname and "Over 6.5" in val and odd <= 1.60:
                             lista_corner65.append(f"• {nome} @ {odd}")
                         if bid==6 and "Over 6.5" in val and odd <= 1.60:
                              lista_corner65.append(f"• {nome} @ {odd}")
         except: continue
-
-    # Rimuovi duplicati
     lista_over15 = sorted(list(set(lista_over15)))
     lista_corner65 = sorted(list(set(lista_corner65)))
-    
-    # Costruisci schedina quota 1.80 totale
     picks_sicuri = sorted(list({p['txt']: p for p in picks_sicuri}.values()), key=lambda x: x['q'])
     schedina_txt = ""
     quota_tot = 1
@@ -88,19 +85,15 @@ def get_liste_10():
         usate.append(p)
         if quota_tot >= 1.80:
             break
-    
     if usate and quota_tot >= 1.80:
         schedina_txt = f"🎯 *SCHEDINA 1.80 TOTALE - Quota {quota_tot:.2f}*\n\n"
         for u in usate:
             schedina_txt += f"• {u['txt']}\n"
     else:
         schedina_txt = "Schedina 1.80: non ci sono abbastanza partite sicure oggi sotto 1.30"
-
     return lista_over15, lista_corner65, schedina_txt
 
-# FINE NUOVO BLOCCO
-
-send("BOT DAMI V13.6 RIPARTITO - LISTE OVER 1.5 + CORNER 6.5 + SCHEDINA 1.80")
+send("BOT DAMI V13.6 ON - ORARIO 08:00-02:00")
 
 inviate=set()
 rosso=set()
@@ -108,6 +101,12 @@ fatto_10=False
 
 while True:
     try:
+        # --- CONTROLLO ORARIO ---
+        if not is_orario_attivo():
+            print(f"Zzz dormo {datetime.now().hour}:{datetime.now().minute} - riparto alle 08:00")
+            time.sleep(600)
+            continue
+
         now = datetime.now()
         if now.hour == 10 and now.minute < 5 and not fatto_10:
             over, corner, schedina = get_liste_10()
