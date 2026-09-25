@@ -36,65 +36,92 @@ def calcola_prob(sot, shots, dang, minute):
     if minute >= 75: prob+=12
     return min(94, max(10, int(prob)))
 
-# --- NUOVA PARTE SCHEDINA 10:00 QUOTA 1.8 MEDIA 2.0 ---
-def get_schedina():
+# --- NUOVO BLOCCO 10:00 CHE MI HAI CHIESTO TU ---
+def get_liste_10():
+    today = datetime.now().strftime("%Y-%m-%d")
     try:
-        today = datetime.now().strftime("%Y-%m-%d")
-        # Prende partite di oggi con quote
-        fixtures = requests.get(f"https://v3.football.api-sports.io/odds?date={today}&bet=5", headers=HEAD, timeout=20).json().get("response",[])
-        picks = []
-        for f in fixtures:
-            try:
-                fixture = f["fixture"]["id"]
-                league = f["league"]["name"]
-                home = f["teams"]["home"]["name"]
-                away = f["teams"]["away"]["name"]
-                # Cerca Over 0.5 / Under
-                for book in f.get("bookmakers",[]):
-                    for bet in book.get("bets",[]):
-                        if bet["id"]==5: # Goals Over/Under
-                            for v in bet["values"]:
-                                if "Over 1.5" in v["value"]:
-                                    quota = float(v["odd"])
-                                    if quota >= 1.80: # FILTRO QUOTA 1.8 CHE VOLEVI
-                                        picks.append({"q": quota, "txt": f"{home} vs {away} - Over 1.5 @ {quota} ({league})"})
-            except: continue
-        
-        if not picks: return None
-        picks = sorted(picks, key=lambda x: x["q"])[:5] # Prende le 5 più basse sopra 1.8
-        if len(picks) < 2: return None
-        
-        media = sum([p["q"] for p in picks]) / len(picks)
-        if media < 2.0: return None # FILTRO MEDIA 2.0
+        odds_data = requests.get(f"https://v3.football.api-sports.io/odds?date={today}", headers=HEAD, timeout=25).json().get("response",[])
+    except: return None, None, None
 
-        txt = f"📋 *SCHEDINA 10:00 - MEDIA {media:.2f}*\n\n"
-        quota_tot = 1
-        for p in picks:
-            txt += f"• {p['txt']}\n"
-            quota_tot *= p["q"]
-        txt += f"\n*Quota Tot: {quota_tot:.2f}*"
-        return txt
-    except Exception as e:
-        print(f"Errore schedina {e}")
-        return None
-# --- FINE SCHEDINA ---
+    lista_over15 = []
+    lista_corner65 = []
+    picks_sicuri = [] # per schedina 1.80 totale
 
-send("BOT DAMI V13.5 COMPLETO RIPARTITO - CON SCHEDINA 1.8 / MEDIA 2.0")
+    for f in odds_data:
+        try:
+            fixture_id = f["fixture"]["id"]
+            home = f["teams"]["home"]["name"]
+            away = f["teams"]["away"]["name"]
+            league = f["league"]["name"]
+            ora = f["fixture"]["date"][11:16]
+            nome = f"{ora} {home} vs {away} ({league})"
+
+            for book in f.get("bookmakers",[]):
+                for bet in book.get("bets",[]):
+                    bname = bet.get("name","").lower()
+                    bid = bet.get("id",0)
+                    for v in bet.get("values",[]):
+                        val = v["value"]; odd = float(v["odd"])
+                        # Over 1.5 Gol - Bet 5
+                        if bid==5 and "Over 1.5" in val and odd <= 1.40:
+                            lista_over15.append(f"• {nome} @ {odd}")
+                            if 1.05 <= odd <= 1.30:
+                                picks_sicuri.append({"txt": f"{home} vs {away} Over 1.5 @ {odd}", "q": odd})
+                        # Over 6.5 Corner - di solito bet 6 o 45 o nome contiene corner
+                        if "corner" in bname and "Over 6.5" in val and odd <= 1.60:
+                            lista_corner65.append(f"• {nome} @ {odd}")
+                        if bid==6 and "Over 6.5" in val and odd <= 1.60:
+                             lista_corner65.append(f"• {nome} @ {odd}")
+        except: continue
+
+    # Rimuovi duplicati
+    lista_over15 = sorted(list(set(lista_over15)))
+    lista_corner65 = sorted(list(set(lista_corner65)))
+    
+    # Costruisci schedina quota 1.80 totale
+    picks_sicuri = sorted(list({p['txt']: p for p in picks_sicuri}.values()), key=lambda x: x['q'])
+    schedina_txt = ""
+    quota_tot = 1
+    usate = []
+    for p in picks_sicuri:
+        quota_tot *= p["q"]
+        usate.append(p)
+        if quota_tot >= 1.80:
+            break
+    
+    if usate and quota_tot >= 1.80:
+        schedina_txt = f"🎯 *SCHEDINA 1.80 TOTALE - Quota {quota_tot:.2f}*\n\n"
+        for u in usate:
+            schedina_txt += f"• {u['txt']}\n"
+    else:
+        schedina_txt = "Schedina 1.80: non ci sono abbastanza partite sicure oggi sotto 1.30"
+
+    return lista_over15, lista_corner65, schedina_txt
+
+# FINE NUOVO BLOCCO
+
+send("BOT DAMI V13.6 RIPARTITO - LISTE OVER 1.5 + CORNER 6.5 + SCHEDINA 1.80")
 
 inviate=set()
 rosso=set()
-schedina_inviata=False
+fatto_10=False
 
 while True:
     try:
         now = datetime.now()
-        # SCHEDINA ALLE 10:00
-        if now.hour == 10 and now.minute < 2 and not schedina_inviata:
-            txt = get_schedina()
-            if txt: send(txt)
-            else: send("Schedina 10:00 - Oggi nessuna quota rispetta filtro 1.8 / media 2.0")
-            schedina_inviata = True
-        if now.hour == 11: schedina_inviata = False
+        if now.hour == 10 and now.minute < 5 and not fatto_10:
+            over, corner, schedina = get_liste_10()
+            if over is not None:
+                txt1 = f"📋 *TUTTE OVER 1.5 OGGI ({len(over)})*\n\n" + ("\n".join(over[:90]) if over else "Nessuna trovata")
+                send(txt1)
+                time.sleep(2)
+                txt2 = f"🚩 *TUTTE OVER 6.5 CORNER OGGI ({len(corner)})*\n\n" + ("\n".join(corner[:90]) if corner else "Nessuna trovata")
+                send(txt2)
+                time.sleep(2)
+                send(schedina)
+            fatto_10 = True
+        if now.hour == 11:
+            fatto_10 = False
 
         live=requests.get("https://v3.football.api-sports.io/fixtures?live=all", headers=HEAD, timeout=20).json().get("response", [])
         for m in live:
