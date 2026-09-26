@@ -25,19 +25,19 @@ def api_get(url):
     except: return []
 
 def run_web():
-    app.run(host='0.0.0.0', port=10000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
 
 # AVVIA WEB PER RENDER
-threading.Thread(target=run_web, daemon=False).start()
+threading.Thread(target=run_web, daemon=True).start()
 time.sleep(2)
-tg(f"✅ BOT PARTITO - {datetime.now(ITALY).strftime('%H:%M:%S')} - TEST OK")
+tg(f"✅ BOT FIXATO - {datetime.now(ITALY).strftime('%H:%M:%S')} - Solo >80% + GOL VINTO")
 
 avvisati = set()
 gol_memoria = {}
 giorno_reset = datetime.now(ITALY).day
-ultimo_top = time.time() - 3000
-ultima_schedina = 0
 ultimo_golgol = 0
+BLACK = ["U23","U21","U19","Women","W ","Youth","Reserve","Amateur","Friendly"]
 
 while True:
     try:
@@ -51,16 +51,16 @@ while True:
         if not live:
             time.sleep(60); continue
 
-        # GOL GOL PREMATCH OGNI 2 ORE
-        if time.time() - ultimo_golgol >= 7200:
+        # GOL GOL PREMATCH OGNI 3 ORE - FILTRATO
+        if time.time() - ultimo_golgol >= 10800:
             oggi = now_it.strftime("%Y-%m-%d")
             fixtures = api_get(f"https://v3.football.api-sports.io/fixtures?date={oggi}")
             if fixtures and fixtures!= "LIMIT":
-                cand = [(60, f) for f in fixtures if f["fixture"]["status"]["short"]=="NS"][:2]
-                if cand:
+                buone = [f for f in fixtures if f["fixture"]["status"]["short"]=="NS" and not any(b in f["league"]["name"] for b in BLACK)]
+                if buone:
                     txt = f"⚽️ PALINSESTO GOL GOL - {now_it.strftime('%H:%M')}\n\n"
-                    for _, ff in cand:
-                        txt += f"{ff['teams']['home']['name']} vs {ff['teams']['away']['name']}\n👉 GOL GOL SI\n\n"
+                    for ff in buone[:2]:
+                        txt += f"{ff['teams']['home']['name']} vs {ff['teams']['away']['name']}\n🌍 {ff['league']['name']}\n👉 GOL GOL SI\n\n"
                     tg(txt)
             ultimo_golgol = time.time()
 
@@ -69,17 +69,23 @@ while True:
             m = g["fixture"]["status"]["elapsed"] or 0
             gh = g["goals"]["home"]; ga = g["goals"]["away"]
             tot = gh+ga
+            lega = g["league"]["name"]
 
-            if fid in gol_memoria and tot > gol_memoria[fid]:
-                tg(f"⚽️ GOL! {m}' {g['teams']['home']['name']} {gh}-{ga} {g['teams']['away']['name']}")
+            if any(b in lega for b in BLACK): continue
+
+            # FIX 1: GOL VINTO SOLO SE ERA UNA NOSTRA >80%
+            if fid in avvisati and tot > gol_memoria.get(fid, 0):
+                tg(f"✅ GOL VINTO! {m}' {lega}\n{g['teams']['home']['name']} {gh}-{ga} {g['teams']['away']['name']}")
+
             gol_memoria[fid]=tot
 
-            if m < 55 or m > 90: continue
+            # FIX 2: ALERT >80% DAL 55' ALL' 88'
+            if m < 55 or m > 88: continue
             if fid in avvisati: continue
             if abs(gh-ga) >=3: continue
             if gh+ga >=5: continue
             perc = 80 + (5 if m>=65 else 0) + (5 if m>=75 else 0)
-            tg(f"🔥 {m}' >80%\n{g['league']['name']}\n{g['teams']['home']['name']} {gh}-{ga} {g['teams']['away']['name']}\nProb: {min(perc,92)}%")
+            tg(f"🔥 {m}' >80%\n🌍 {lega}\n{g['teams']['home']['name']} {gh}-{ga} {g['teams']['away']['name']}\nProb: {min(perc,92)}%")
             avvisati.add(fid)
 
         time.sleep(60)
