@@ -9,7 +9,6 @@ API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY")
 app = Flask(__name__)
 @app.route('/')
 def home(): return "ok"
-threading.Thread(target=lambda: app.run(host='0.0.0.0', port=10000), daemon=True).start()
 
 def tg(msg):
     try: requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode":"HTML"}, timeout=20)
@@ -24,46 +23,64 @@ def api_get(url):
         return j.get("response", [])
     except: return []
 
-rossi=set()
-avvisati=set()
-ultimo=time.time()-7000
+# FIX CONSUMI
+avvisati = set()
+giorno_reset = datetime.now().day
+ultimo_top = time.time() - 7000
+
+# Flask separato, non dentro il loop
+threading.Thread(target=lambda: app.run(host='0.0.0.0', port=10000), daemon=True).start()
 
 while True:
-    live=api_get("https://v3.football.api-sports.io/fixtures?live=all")
-    if live=="LIMIT":
+    # Reset giornaliero avvisati
+    if datetime.now().day!= giorno_reset:
+        avvisati.clear()
+        giorno_reset = datetime.now().day
+        tg(f"🔄 Reset giorno {giorno_reset}")
+
+    live = api_get("https://v3.football.api-sports.io/fixtures?live=all")
+
+    if live == "LIMIT":
+        tg("⚠️ Limite API raggiunto, pausa 1h")
         time.sleep(3600)
         continue
+
+    if not live:
+        print(f"{datetime.now().strftime('%H:%M')} 0 live")
+        time.sleep(120)
+        continue
+
+    print(f"{datetime.now().strftime('%H:%M')} LIVE: {len(live)}")
+
     for g in live:
-        fid=g["fixture"]["id"]
-        m=g["fixture"]["status"]["elapsed"] or 0
-        gh=g["goals"]["home"]
-        ga=g["goals"]["away"]
-        if 1<=m<=60 and fid not in rossi:
-            ev=api_get(f"https://v3.football.api-sports.io/fixtures/events?fixture={fid}")
-            if ev!="LIMIT":
-                for e in ev:
-                    if e["type"]=="Card" and e["detail"]=="Red Card" and e["time"]["elapsed"]<=60:
-                        tg(f"🟥 ROSSO {e['time']['elapsed']}'\n🌍 {g['league']['country']} - {g['league']['name']}\n{g['teams']['home']['name']} {gh}-{ga} {g['teams']['away']['name']}\n👤 {e['player']['name']}")
-                        rossi.add(fid)
-        if m>=55 and fid not in avvisati:
-            perc=80+(2 if m>=60 else 0)+(3 if m>=65 else 0)+(4 if m>=70 else 0)+(3 if m>=75 else 0)
-            if perc>92: perc=92
-            tg(f"🔥 {m}' >80%\n🌍 {g['league']['country']} - {g['league']['name']}\n{g['teams']['home']['name']} {gh}-{ga} {g['teams']['away']['name']}\n<b>Prob: {perc}%</b>")
-            avvisati.add(fid)
-    if time.time()-ultimo>=7200:
-        cand=[]
+        fid = g["fixture"]["id"]
+        m = g["fixture"]["status"]["elapsed"] or 0
+        if m < 55: continue
+        if fid in avvisati: continue
+
+        gh = g["goals"]["home"]
+        ga = g["goals"]["away"]
+        perc = 80 + (2 if m>=60 else 0) + (3 if m>=65 else 0) + (4 if m>=70 else 0) + (3 if m>=75 else 0)
+        if perc > 92: perc = 92
+
+        tg(f"🔥 {m}' >80%\n🌍 {g['league']['country']} - {g['league']['name']}\n{g['teams']['home']['name']} {gh}-{ga} {g['teams']['away']['name']}\n<b>Prob: {perc}%</b>")
+        avvisati.add(fid)
+
+    # TOP 3 ogni 2 ore
+    if time.time() - ultimo_top >= 7200:
+        cand = []
         for g in live:
-            m=g["fixture"]["status"]["elapsed"] or 0
-            if m>=55:
-                perc=80+(2 if m>=60 else 0)+(3 if m>=65 else 0)+(4 if m>=70 else 0)+(3 if m>=75 else 0)
-                if perc>92: perc=92
-                cand.append((perc,g))
-        cand.sort(key=lambda x:x[0], reverse=True)
-        top=cand[:3]
+            m = g["fixture"]["status"]["elapsed"] or 0
+            if m >= 55:
+                perc = 80 + (2 if m>=60 else 0) + (3 if m>=65 else 0) + (4 if m>=70 else 0) + (3 if m>=75 else 0)
+                cand.append((perc, g))
+        cand.sort(key=lambda x: x[0], reverse=True)
+        top = cand[:3]
         if top:
-            txt=f"🔥 TOP 3 DAL 55' - {datetime.now().strftime('%H:%M')}\n\n"
-            for p,gg in top:
-                txt+=f"⚽️ {gg['fixture']['status']['elapsed']}' 🌍 {gg['league']['country']} - {gg['league']['name']}\n{gg['teams']['home']['name']} {gg['goals']['home']}-{gg['goals']['away']} {gg['teams']['away']['name']}\n<b>Prob: {p}%</b>\n\n"
+            txt = f"🔥 TOP 3 DAL 55' - {datetime.now().strftime('%H:%M')}\n\n"
+            for p, gg in top:
+                txt += f"⚽️ {gg['fixture']['status']['elapsed']}' 🌍 {gg['league']['country']} - {gg['league']['name']}\n{gg['teams']['home']['name']} {gg['goals']['home']}-{gg['goals']['away']} {gg['teams']['away']['name']}\n<b>Prob: {p}%</b>\n\n"
             tg(txt)
-        ultimo=time.time()
-    time.sleep(90)
+        ultimo_top = time.time()
+
+    time.sleep(120) # 120 sec = 720 richieste al giorno = 9,6% del tuo piano
