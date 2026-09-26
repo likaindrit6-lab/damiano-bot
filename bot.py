@@ -25,8 +25,8 @@ def api_get(url):
 
 avvisati = set()
 giorno_reset = datetime.now().day
-ultimo_top = time.time() - 7000
-ultima_schedina = time.time() - 3500
+ultimo_top = time.time() - 3000 # parte dopo 10 min
+ultima_schedina = 0 # parte SUBITO
 
 def build_schedina(live_list):
     cand = []
@@ -65,8 +65,8 @@ while True:
         tg(f"🔥 {m}' >80%\n🌍 {g['league']['country']} - {g['league']['name']}\n{g['teams']['home']['name']} {gh}-{ga} {g['teams']['away']['name']}\n<b>Prob: {perc}%</b>")
         avvisati.add(fid)
 
-    # 2) TOP 3 OGNI 2 ORE
-    if time.time() - ultimo_top >= 7200:
+    # 2) TOP 3 OGNI 1 ORA
+    if time.time() - ultimo_top >= 3600:
         cand = [(80 + (2 if (g["fixture"]["status"]["elapsed"] or 0)>=60 else 0) + (3 if (g["fixture"]["status"]["elapsed"] or 0)>=65 else 0) + (4 if (g["fixture"]["status"]["elapsed"] or 0)>=70 else 0) + (3 if (g["fixture"]["status"]["elapsed"] or 0)>=75 else 0), g) for g in live if (g["fixture"]["status"]["elapsed"] or 0) >= 55]
         cand.sort(key=lambda x: x[0], reverse=True)
         top = cand[:3]
@@ -77,7 +77,7 @@ while True:
             tg(txt)
         ultimo_top = time.time()
 
-    # 3) SCHEDINA 1.50 OGNI 60 MIN
+    # 3) SCHEDINA 1.50 OGNI 60 MIN - SUBITO
     if time.time() - ultima_schedina >= 3600:
         picks = build_schedina(live)
         if len(picks) >= 2:
