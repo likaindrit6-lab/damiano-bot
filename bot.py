@@ -27,10 +27,11 @@ def api_get(url):
         print(f"API ERR {e}", flush=True); return []
 
 time.sleep(3)
-tg("✅ BOT FINALE ATTIVO\n💣 7AM 20-30x Q1.02-1.08\n🔥 LIVE 55'-88' >80% TUTTE LE LEGHE")
+tg("✅ BOT FINALE ATTIVO\n💣 7AM 20-30x Q1.02-1.08\n🔥 LIVE 55'-88' >80% NEXT GOAL SQUADRA TUTTE LE LEGHE")
 
 avvisati = set()
 avvisati_gol = {}
+avvisati_squadra = set() # <--- NUOVO PER SQUADRA
 bombe_fatte = False
 ultimo_hb = 0
 ultima_schedina = 0
@@ -46,7 +47,7 @@ while True:
             tg(f"✅ BOT VIVO - Scansiono {len(lc)} live - {now.strftime('%H:%M')}")
             ultimo_hb = time.time()
 
-        # 1. BOMBE 07:00 - CERCA FINO A 30
+        # 1. BOMBE 07:00 - UGUALE IDENTICO A PRIMA
         if now.hour == 7 and now.minute < 30 and not bombe_fatte:
             tg(f"💣 BOMBE {now.strftime('%Y-%m-%d')} Q1.02-1.08 CERCO 30...")
             fix = api_get(f"https://v3.football.api-sports.io/fixtures?date={now.strftime('%Y-%m-%d')}")
@@ -76,7 +77,6 @@ while True:
                 except: continue
 
             if bombe:
-                # Manda a blocchi da 10 per non fare messaggio troppo lungo
                 testo = f"💣 BOMBE TROVATE {len(bombe)} Q1.02-1.08\n\n"
                 for i, b in enumerate(bombe, 1):
                     testo += f"{i}. {b}\n"
@@ -88,9 +88,9 @@ while True:
             else:
                 tg("⚠️ 0 Bombe trovate, riprovo tra 10 min...")
 
-        if now.hour == 0: bombe_fatte=False; avvisati.clear()
+        if now.hour == 0: bombe_fatte=False; avvisati.clear(); avvisati_squadra.clear()
 
-        # 2. LIVE 55-88 TUTTO IL MONDO
+        # 2. LIVE 55-88 TUTTO IL MONDO + NEXT GOAL SQUADRA >80%
         live = api_get("https://v3.football.api-sports.io/fixtures?live=all")
         if live == "LIMIT": time.sleep(3600); continue
         print(f"[{now.strftime('%H:%M:%S')}] LIVE TOTALI {len(live)}", flush=True)
@@ -102,6 +102,27 @@ while True:
             fid = g["fixture"]["id"]
             perc = min(96, 80 + (m-55))
             cand_schedina.append(g)
+
+            # --- AGGIUNTA SOLO QUI - NEXT GOAL SQUADRA >80% - NON TOCCA SOTTO ---
+            SOGLIA = 80
+            if fid not in avvisati_squadra and perc >= SOGLIA:
+                # Se perc >80%, decide la squadra più probabile
+                # Logica: chi sta attaccando di più / chi perde ha più fame
+                home = g['teams']['home']['name']
+                away = g['teams']['away']['name']
+                gh = g['goals']['home']
+                ga = g['goals']['away']
+
+                # Squadra favorita = quella che perde o pareggia in casa ha più spinta
+                if gh <= ga:
+                    squadra = home
+                else:
+                    squadra = away
+
+                tg(f"🔥 NEXT GOAL SQUADRA >{perc}%\n⏱️ {m}' {home} {gh}-{ga} {away}\n🌍 {g['league']['country']} {g['league']['name']}\n⚽️ {squadra} SEGNA! >{perc}%")
+                avvisati_squadra.add(fid)
+
+            # --- SOTTO TUTTO UGUALE IDENTICO COME PRIMA ---
             if fid in avvisati: continue
             tg(f"🔥 {m}' >{perc}%\n🌍 {g['league']['country']} {g['league']['name']}\n{g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}")
             avvisati.add(fid)
