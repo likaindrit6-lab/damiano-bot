@@ -37,7 +37,8 @@ stats_cache = {}
 bombe_fatte = False
 ultimo_hb = 0
 ultima_schedina = 0
-ultima_schedina_30 = 0 # AGGIUNTA NUOVA SCHEDINA
+ultima_schedina_30 = 0
+ultima_schedina_sicura = 0 # NUOVA OGNI 2 ORE
 
 def get_stat(arr, nome):
     for s in arr:
@@ -57,6 +58,7 @@ while True:
             tg(f"✅ BOT VIVO - {len(lc)} live - {now.strftime('%H:%M')}")
             ultimo_hb = time.time()
 
+        # BOMBE 7:00 - IDENTICO
         if now.hour == 7 and now.minute < 30 and not bombe_fatte:
             tg(f"💣 BOMBE {now.strftime('%Y-%m-%d')} CERCO 30...")
             fix = api_get(f"https://v3.football.api-sports.io/fixtures?date={now.strftime('%Y-%m-%d')}")
@@ -91,6 +93,52 @@ while True:
                 if testo: tg(testo)
                 if len(bombe) >= 15: bombe_fatte = True
 
+        # NUOVA SCHEDINA OGNI 2 ORE - 10 PARTITE 1X + OVER 0.5
+        if time.time() - ultima_schedina_sicura > 7200:
+            try:
+                fix = api_get(f"https://v3.football.api-sports.io/fixtures?date={now.strftime('%Y-%m-%d')}")
+                fix = [x for x in fix if x['fixture']['status']['short'] == 'NS']
+                sicure = []
+                for g in fix:
+                    if len(sicure) >= 10: break
+                    odds = api_get(f"https://v3.football.api-sports.io/odds?fixture={g['fixture']['id']}")
+                    if odds == "LIMIT": time.sleep(2); continue
+                    if not odds: time.sleep(0.2); continue
+                    q_1x = 0
+                    q_over = 0
+                    for o in odds:
+                        for bk in o.get("bookmakers",[])[:3]:
+                            for bet in bk.get("bets",[]):
+                                if bet["name"] == "Double Chance":
+                                    for v in bet["values"]:
+                                        if "1X" in v["value"]:
+                                            try:
+                                                q=float(v["odd"])
+                                                if 1.03 <= q <= 1.20: q_1x = q
+                                            except: pass
+                                if bet["name"] == "Goals Over/Under" or bet["name"] == "Over/Under":
+                                    for v in bet["values"]:
+                                        if "Over 0.5" in v["value"]:
+                                            try:
+                                                q=float(v["odd"])
+                                                if 1.02 <= q <= 1.12: q_over = q
+                                            except: pass
+                    if q_1x > 0 and q_over > 0:
+                        qc = round(q_1x * q_over, 2)
+                        if 1.05 <= qc <= 1.30:
+                            ora = datetime.fromisoformat(g['fixture']['date'].replace('Z','+00:00')).astimezone(ITALY).strftime('%H:%M')
+                            sicure.append(f"{ora} {g['league']['country']}\n{g['teams']['home']['name']} vs {g['teams']['away']['name']}\n=> 1X+Over0.5 @{qc} (1X {q_1x} / Over {q_over})\n")
+                    time.sleep(0.3)
+                if len(sicure) >= 8:
+                    txt = f"💰 SCHEDINA SICURA 10 PARTITE - {now.strftime('%H:%M')}\nDoppia Chance + Over\n\n"
+                    for i, s in enumerate(sicure[:10], 1):
+                        txt += f"{i}. {s}\n"
+                    txt += "\n🔒 Super sicura 1X + Over 0.5"
+                    tg(txt)
+                    ultima_schedina_sicura = time.time()
+            except Exception as e:
+                print(f"ERR SICURA {e}", flush=True)
+
         if now.hour == 0:
             bombe_fatte=False
             avvisati_squadra.clear()
@@ -103,7 +151,7 @@ while True:
         if live == "LIMIT": time.sleep(3600); continue
 
         cand_schedina = []
-        cand_schedina_50 = [] # AGGIUNTA PER SCHEDINA 30MIN
+        cand_schedina_50 = []
         for g in live:
             m = g["fixture"]["status"]["elapsed"] or 0
             if m < 20 or m > 92: continue
@@ -115,7 +163,6 @@ while True:
             country = g['league']['country']
             lega = g['league']['name']
 
-            # --- 20'-45' PRIMO TEMPO >85% - TUO ORIGINALE IDENTICO ---
             if 20 <= m <= 45 and fid not in preavvisati_1t:
                 if fid not in stats_cache or time.time() - stats_cache[fid]['time'] > 180:
                     st = api_get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
@@ -139,11 +186,11 @@ while True:
                     tg(f"⚽️ PRIMO TEMPO >{d['perc']}%\n⏱️ {m}' {home} {gh}-{ga} {away}\n🌍 {country} {lega}\n📊 TiriP:{d['sot']} Tot:{d['tot']} Pericolosi:{d['dang']} Angoli:{d['corn']}\n🔥 GOL 1° TEMPO!")
                     preavvisati_1t.add(fid)
 
-            # AGGIUNTA: raccolgo per schedina 30min dal 50' in poi
-            if 50 <= m <= 92:
-                cand_schedina_50.append(g)
+            # FIX 50-85 + NO 0-0 dopo 80'
+            if 50 <= m <= 85:
+                if not (m >= 80 and gh == 0 and ga == 0):
+                    cand_schedina_50.append(g)
 
-            # --- 60' + 70' SECONDO TEMPO - TUO ORIGINALE IDENTICO ---
             if m < 60: continue
             perc = min(96, 70 + (m-45))
 
@@ -168,7 +215,6 @@ while True:
                     tg(f"✅ GOL VINTO >90%!\n{g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}\n{g['league']['name']}")
                     del avvisati_gol[fid]
 
-        # TUA SCHEDINA ORIGINALE - NON TOCCATA
         if time.time() - ultima_schedina > 3600 and len(cand_schedina)>=3:
             txt="🔥 SCHEDINA Q1.60 >90%\n\n"
             for g in cand_schedina[:3]:
@@ -176,10 +222,9 @@ while True:
                 txt+=f"{m}' {g['league']['country']} {g['teams']['home']['name']} vs {g['teams']['away']['name']}\n\n"
             tg(txt); ultima_schedina=time.time()
 
-        # AGGIUNTA NUOVA SCHEDINA 4 PARTITE OGNI 30 MIN >80%
         if time.time() - ultima_schedina_30 > 1800 and len(cand_schedina_50)>=4:
             cand_schedina_50 = sorted(cand_schedina_50, key=lambda x: x["fixture"]["status"]["elapsed"] or 0, reverse=True)
-            txt = f"📋 SCHEDINA 4 PARTITE >80% - {now.strftime('%H:%M')}\nDal 50' al 90'\n\n"
+            txt = f"📋 SCHEDINA 4 PARTITE >80% - {now.strftime('%H:%M')}\nDal 50' all' 85' (no 0-0 morti)\n\n"
             for g in cand_schedina_50[:4]:
                 m=g["fixture"]["status"]["elapsed"]
                 perc = min(96, 70 + (m-45))
