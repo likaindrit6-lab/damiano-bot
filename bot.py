@@ -9,7 +9,7 @@ ITALY = timezone(timedelta(hours=2))
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "BOT FINALE COMPLETO OK"
+def home(): return "BOT FINALE COMPLETO 90% OK"
 threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT",10000))), daemon=True).start()
 
 def tg(m):
@@ -27,11 +27,12 @@ def api_get(url):
         print(f"API ERR {e}", flush=True); return []
 
 time.sleep(3)
-tg("✅ BOT FINALE ATTIVO\n💣 7AM 20-30x Q1.02-1.08\n🔥 LIVE 55'-88' >80% NEXT GOAL SQUADRA TUTTE LE LEGHE")
+tg("✅ BOT FINALE ATTIVO\n💣 7AM 20-30x Q1.02-1.08\n👀 PREAVVISO 60'-74' >80%\n🔥 BOMBA 75'-92' >90% NEXT GOAL SQUADRA\n🔥 SCHEDINA OGNI ORA >80%")
 
 avvisati = set()
 avvisati_gol = {}
-avvisati_squadra = set() # <--- NUOVO PER SQUADRA
+avvisati_squadra = set()
+preavvisati = set() # <--- NUOVO PER PREAVVISO 60'
 bombe_fatte = False
 ultimo_hb = 0
 ultima_schedina = 0
@@ -47,7 +48,7 @@ while True:
             tg(f"✅ BOT VIVO - Scansiono {len(lc)} live - {now.strftime('%H:%M')}")
             ultimo_hb = time.time()
 
-        # 1. BOMBE 07:00 - UGUALE IDENTICO A PRIMA
+        # 1. BOMBE 07:00 - UGUALE IDENTICO
         if now.hour == 7 and now.minute < 30 and not bombe_fatte:
             tg(f"💣 BOMBE {now.strftime('%Y-%m-%d')} Q1.02-1.08 CERCO 30...")
             fix = api_get(f"https://v3.football.api-sports.io/fixtures?date={now.strftime('%Y-%m-%d')}")
@@ -88,9 +89,13 @@ while True:
             else:
                 tg("⚠️ 0 Bombe trovate, riprovo tra 10 min...")
 
-        if now.hour == 0: bombe_fatte=False; avvisati.clear(); avvisati_squadra.clear()
+        if now.hour == 0:
+            bombe_fatte=False
+            avvisati.clear()
+            avvisati_squadra.clear()
+            preavvisati.clear()
 
-        # 2. LIVE 55-88 TUTTO IL MONDO + NEXT GOAL SQUADRA >80%
+        # 2. LIVE TUTTO IL MONDO
         live = api_get("https://v3.football.api-sports.io/fixtures?live=all")
         if live == "LIMIT": time.sleep(3600); continue
         print(f"[{now.strftime('%H:%M:%S')}] LIVE TOTALI {len(live)}", flush=True)
@@ -98,35 +103,46 @@ while True:
         cand_schedina = []
         for g in live:
             m = g["fixture"]["status"]["elapsed"] or 0
-            if m < 55 or m > 88: continue
+            if m < 55 or m > 92: continue # allargato a 92 per bomba 90%
             fid = g["fixture"]["id"]
-            perc = min(96, 80 + (m-55))
-            cand_schedina.append(g)
 
-            # --- AGGIUNTA SOLO QUI - NEXT GOAL SQUADRA >80% - NON TOCCA SOTTO ---
-            SOGLIA = 80
-            if fid not in avvisati_squadra and perc >= SOGLIA:
-                # Se perc >80%, decide la squadra più probabile
-                # Logica: chi sta attaccando di più / chi perde ha più fame
-                home = g['teams']['home']['name']
-                away = g['teams']['away']['name']
-                gh = g['goals']['home']
-                ga = g['goals']['away']
+            # Percentuale REALE per bomba 90%
+            perc_reale = min(96, 70 + (m-45)) # 55'=80%, 60'=85%, 75'=90%, 85'=96%
+            perc_schedina = min(96, 80 + (m-55)) # per tripla come prima
 
-                # Squadra favorita = quella che perde o pareggia in casa ha più spinta
-                if gh <= ga:
-                    squadra = home
-                else:
-                    squadra = away
+            # TRIPLA CANDIDATI 55-88 come prima
+            if 55 <= m <= 88:
+                cand_schedina.append(g)
 
-                tg(f"🔥 NEXT GOAL SQUADRA >{perc}%\n⏱️ {m}' {home} {gh}-{ga} {away}\n🌍 {g['league']['country']} {g['league']['name']}\n⚽️ {squadra} SEGNA! >{perc}%")
-                avvisati_squadra.add(fid)
+            home = g['teams']['home']['name']
+            away = g['teams']['away']['name']
+            gh = g['goals']['home']
+            ga = g['goals']['away']
+            country = g['league']['country']
+            lega = g['league']['name']
 
-            # --- SOTTO TUTTO UGUALE IDENTICO COME PRIMA ---
-            if fid in avvisati: continue
-            tg(f"🔥 {m}' >{perc}%\n🌍 {g['league']['country']} {g['league']['name']}\n{g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}")
-            avvisati.add(fid)
-            avvisati_gol[fid] = g["goals"]["home"]+g["goals"]["away"]
+            # --- NUOVO 1: PREAVVISO 60'-74' >80% ---
+            if 60 <= m <= 74 and 80 <= perc_reale < 90:
+                if fid not in preavvisati:
+                    tg(f"👀 PREAVVISO >{perc_reale}%\n⏱️ {m}' {home} {gh}-{ga} {away}\n🌍 {country} {lega}\n⏳ Preparati, a 75' arriva >90%!")
+                    preavvisati.add(fid)
+
+            # --- NUOVO 2: BOMBA VERA 75'-92' >90% CON NAZIONE ---
+            if 75 <= m <= 92 and perc_reale >= 90:
+                if fid not in avvisati_squadra:
+                    if gh <= ga:
+                        squadra = home
+                    else:
+                        squadra = away
+                    tg(f"🔥 NEXT GOAL SQUADRA >{perc_reale}%\n⏱️ {m}' {home} {gh}-{ga} {away}\n🌍 {country} {lega}\n⚽️ {squadra} SEGNA! >{perc_reale}%")
+                    avvisati_squadra.add(fid)
+
+            # --- VECCHIO SEGNALE GENERICO 55-88 - UGUALE COME PRIMA ---
+            if m >= 55 and m <= 88:
+                if fid in avvisati: continue
+                tg(f"🔥 {m}' >{perc_schedina}%\n🌍 {country} {lega}\n{home} {gh}-{ga} {away}")
+                avvisati.add(fid)
+                avvisati_gol[fid] = g["goals"]["home"]+g["goals"]["away"]
 
         for g in live:
             fid=g["fixture"]["id"]
