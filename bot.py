@@ -27,7 +27,7 @@ def api_get(url):
         print(f"API ERR {e}", flush=True); return []
 
 time.sleep(3)
-tg("✅ BOT FINALE ATTIVO\n💣 7AM 20x Q1.02-1.07\n🔥 LIVE 55'-88' >80% TUTTE LE LEGHE")
+tg("✅ BOT FINALE ATTIVO\n💣 7AM 20-30x Q1.02-1.08\n🔥 LIVE 55'-88' >80% TUTTE LE LEGHE")
 
 avvisati = set()
 avvisati_gol = {}
@@ -39,7 +39,6 @@ while True:
     try:
         now = datetime.now(ITALY)
 
-        # HEARTBEAT ogni 15 min
         if time.time() - ultimo_hb > 900:
             lc = api_get("https://v3.football.api-sports.io/fixtures?live=all")
             if lc == "LIMIT":
@@ -47,31 +46,51 @@ while True:
             tg(f"✅ BOT VIVO - Scansiono {len(lc)} live - {now.strftime('%H:%M')}")
             ultimo_hb = time.time()
 
-        # 1. BOMBE 07:00
-        if now.hour == 7 and now.minute < 15 and not bombe_fatte:
-            tg(f"💣 BOMBE {now.strftime('%Y-%m-%d')} Q1.02-1.07 IN CORSO...")
+        # 1. BOMBE 07:00 - CERCA FINO A 30
+        if now.hour == 7 and now.minute < 30 and not bombe_fatte:
+            tg(f"💣 BOMBE {now.strftime('%Y-%m-%d')} Q1.02-1.08 CERCO 30...")
             fix = api_get(f"https://v3.football.api-sports.io/fixtures?date={now.strftime('%Y-%m-%d')}")
+            fix = [x for x in fix if x['fixture']['status']['short'] == 'NS']
             bombe = []
-            for g in fix[:70]:
+            for g in fix:
                 try:
+                    if len(bombe)>=30: break
                     odds = api_get(f"https://v3.football.api-sports.io/odds?fixture={g['fixture']['id']}")
-                    if odds == "LIMIT": break
+                    if odds == "LIMIT": time.sleep(2); continue
+                    if not odds: time.sleep(0.2); continue
                     for o in odds:
-                        for bk in o.get("bookmakers",[])[:1]:
+                        for bk in o.get("bookmakers",[])[:5]:
                             for bet in bk.get("bets",[]):
                                 if bet["name"]=="Match Winner":
                                     for v in bet["values"]:
-                                        q=float(v["odd"])
-                                        if 1.02 <= q <= 1.07:
-                                            bombe.append(f"{g['league']['country']} {g['teams']['home']['name']} vs {g['teams']['away']['name']} Q{q}")
-                    if len(bombe)>=20: break
-                    time.sleep(0.4)
+                                        try:
+                                            q=float(v["odd"])
+                                            if 1.02 <= q <= 1.08:
+                                                ora = datetime.fromisoformat(g['fixture']['date'].replace('Z','+00:00')).astimezone(ITALY).strftime('%H:%M')
+                                                bombe.append(f"{ora} - {g['league']['country']} {g['league']['name']}\n{g['teams']['home']['name']} vs {g['teams']['away']['name']} => {v['value']} Q{q}\n")
+                                                raise StopIteration
+                                        except: continue
+                    time.sleep(0.3)
+                except StopIteration:
+                    continue
                 except: continue
-            if bombe: tg("💣 20 BOMBE Q1.02-1.07\n\n" + "\n".join(bombe[:20]))
-            bombe_fatte = True
+
+            if bombe:
+                # Manda a blocchi da 10 per non fare messaggio troppo lungo
+                testo = f"💣 BOMBE TROVATE {len(bombe)} Q1.02-1.08\n\n"
+                for i, b in enumerate(bombe, 1):
+                    testo += f"{i}. {b}\n"
+                    if i % 10 == 0:
+                        tg(testo); testo = ""; time.sleep(1)
+                if testo: tg(testo)
+                if len(bombe) >= 15: bombe_fatte = True
+                else: tg(f"⚠️ Ne ho trovate solo {len(bombe)}, riprovo tra 10 min...")
+            else:
+                tg("⚠️ 0 Bombe trovate, riprovo tra 10 min...")
+
         if now.hour == 0: bombe_fatte=False; avvisati.clear()
 
-        # 2. LIVE 55-88
+        # 2. LIVE 55-88 TUTTO IL MONDO
         live = api_get("https://v3.football.api-sports.io/fixtures?live=all")
         if live == "LIMIT": time.sleep(3600); continue
         print(f"[{now.strftime('%H:%M:%S')}] LIVE TOTALI {len(live)}", flush=True)
@@ -88,7 +107,6 @@ while True:
             avvisati.add(fid)
             avvisati_gol[fid] = g["goals"]["home"]+g["goals"]["away"]
 
-        # 3. GOL VINTO
         for g in live:
             fid=g["fixture"]["id"]
             if fid in avvisati_gol:
@@ -97,7 +115,6 @@ while True:
                     tg(f"✅ GOL VINTO!\n{g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}\n{g['league']['name']}")
                     del avvisati_gol[fid]
 
-        # 4. SCHEDINA Q1.60
         if time.time() - ultima_schedina > 3600 and len(cand_schedina)>=3:
             txt="🔥 SCHEDINA Q1.60 >80%\n\n"
             for g in cand_schedina[:3]:
