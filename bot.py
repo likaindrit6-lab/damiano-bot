@@ -9,7 +9,7 @@ ITALY = timezone(timedelta(hours=2))
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "BOT FINALE 1T+60-70 OK"
+def home(): return "BOT FINALE 1T+70 OK"
 threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT",10000))), daemon=True).start()
 
 def tg(m):
@@ -27,7 +27,7 @@ def api_get(url):
         print(f"API ERR {e}", flush=True); return []
 
 time.sleep(3)
-tg("✅ BOT FINALE ATTIVO\n⚽️ 20'-45' PRIMO TEMPO >85%\n👀 60' PREPARATI\n🔥 70' GIOCALO >90%")
+tg("✅ BOT FINALE RIPARATO ATTIVO\n⚽️ 20'-45' PRIMO TEMPO >85%\n👀 60' PREPARATI (50 min)\n🔥 70' GIOCALO >90% (60 min)")
 
 avvisati_gol = {}
 avvisati_squadra = set()
@@ -37,8 +37,11 @@ stats_cache = {}
 bombe_fatte = False
 ultimo_hb = 0
 ultima_schedina = 0
+ultima_pre_schedina = 0
 ultima_schedina_30 = 0
-ultima_schedina_sicura = 0 # NUOVA OGNI 2 ORE
+ultima_pre_30 = 0
+ultima_schedina_sicura = 0
+ultima_pre_sicura = 0
 
 def get_stat(arr, nome):
     for s in arr:
@@ -58,7 +61,6 @@ while True:
             tg(f"✅ BOT VIVO - {len(lc)} live - {now.strftime('%H:%M')}")
             ultimo_hb = time.time()
 
-        # BOMBE 7:00 - IDENTICO
         if now.hour == 7 and now.minute < 30 and not bombe_fatte:
             tg(f"💣 BOMBE {now.strftime('%Y-%m-%d')} CERCO 30...")
             fix = api_get(f"https://v3.football.api-sports.io/fixtures?date={now.strftime('%Y-%m-%d')}")
@@ -93,145 +95,12 @@ while True:
                 if testo: tg(testo)
                 if len(bombe) >= 15: bombe_fatte = True
 
-        # NUOVA SCHEDINA OGNI 2 ORE - 10 PARTITE 1X + OVER 0.5
+        # PREAVVISO 10 MIN PRIMA SCHEDINA SICURA - OGNI 2 ORE
+        if time.time() - ultima_schedina_sicura > 6600 and time.time() - ultima_pre_sicura > 6600:
+            tg(f"👀 PREPARATI tra 10 min - SCHEDINA 10 SICURE 1X+Over 0.5\n⏰ {now.strftime('%H:%M')} sta arrivando...")
+            ultima_pre_sicura = time.time()
+
         if time.time() - ultima_schedina_sicura > 7200:
             try:
                 fix = api_get(f"https://v3.football.api-sports.io/fixtures?date={now.strftime('%Y-%m-%d')}")
-                fix = [x for x in fix if x['fixture']['status']['short'] == 'NS']
-                sicure = []
-                for g in fix:
-                    if len(sicure) >= 10: break
-                    odds = api_get(f"https://v3.football.api-sports.io/odds?fixture={g['fixture']['id']}")
-                    if odds == "LIMIT": time.sleep(2); continue
-                    if not odds: time.sleep(0.2); continue
-                    q_1x = 0
-                    q_over = 0
-                    for o in odds:
-                        for bk in o.get("bookmakers",[])[:3]:
-                            for bet in bk.get("bets",[]):
-                                if bet["name"] == "Double Chance":
-                                    for v in bet["values"]:
-                                        if "1X" in v["value"]:
-                                            try:
-                                                q=float(v["odd"])
-                                                if 1.03 <= q <= 1.20: q_1x = q
-                                            except: pass
-                                if bet["name"] == "Goals Over/Under" or bet["name"] == "Over/Under":
-                                    for v in bet["values"]:
-                                        if "Over 0.5" in v["value"]:
-                                            try:
-                                                q=float(v["odd"])
-                                                if 1.02 <= q <= 1.12: q_over = q
-                                            except: pass
-                    if q_1x > 0 and q_over > 0:
-                        qc = round(q_1x * q_over, 2)
-                        if 1.05 <= qc <= 1.30:
-                            ora = datetime.fromisoformat(g['fixture']['date'].replace('Z','+00:00')).astimezone(ITALY).strftime('%H:%M')
-                            sicure.append(f"{ora} {g['league']['country']}\n{g['teams']['home']['name']} vs {g['teams']['away']['name']}\n=> 1X+Over0.5 @{qc} (1X {q_1x} / Over {q_over})\n")
-                    time.sleep(0.3)
-                if len(sicure) >= 8:
-                    txt = f"💰 SCHEDINA SICURA 10 PARTITE - {now.strftime('%H:%M')}\nDoppia Chance + Over\n\n"
-                    for i, s in enumerate(sicure[:10], 1):
-                        txt += f"{i}. {s}\n"
-                    txt += "\n🔒 Super sicura 1X + Over 0.5"
-                    tg(txt)
-                    ultima_schedina_sicura = time.time()
-            except Exception as e:
-                print(f"ERR SICURA {e}", flush=True)
-
-        if now.hour == 0:
-            bombe_fatte=False
-            avvisati_squadra.clear()
-            preavvisati.clear()
-            preavvisati_1t.clear()
-            avvisati_gol.clear()
-            stats_cache.clear()
-
-        live = api_get("https://v3.football.api-sports.io/fixtures?live=all")
-        if live == "LIMIT": time.sleep(3600); continue
-
-        cand_schedina = []
-        cand_schedina_50 = []
-        for g in live:
-            m = g["fixture"]["status"]["elapsed"] or 0
-            if m < 20 or m > 92: continue
-            fid = g["fixture"]["id"]
-            home = g['teams']['home']['name']
-            away = g['teams']['away']['name']
-            gh = g['goals']['home']
-            ga = g['goals']['away']
-            country = g['league']['country']
-            lega = g['league']['name']
-
-            if 20 <= m <= 45 and fid not in preavvisati_1t:
-                if fid not in stats_cache or time.time() - stats_cache[fid]['time'] > 180:
-                    st = api_get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
-                    if st!= "LIMIT" and st and len(st)>=2:
-                        try:
-                            hs = st[0]['statistics']
-                            aws = st[1]['statistics']
-                            sot = get_stat(hs,'Shots on Goal') + get_stat(aws,'Shots on Goal')
-                            tot_s = get_stat(hs,'Total Shots') + get_stat(aws,'Total Shots')
-                            dang = get_stat(hs,'Dangerous Attacks') + get_stat(aws,'Dangerous Attacks')
-                            corn = get_stat(hs,'Corner Kicks') + get_stat(aws,'Corner Kicks')
-                            perc1 = 0
-                            if sot >= 5 and dang >= 35: perc1 = 92
-                            elif sot >= 4 and dang >= 28: perc1 = 89
-                            elif sot >= 3 and dang >= 25 and tot_s >= 7: perc1 = 86
-                            stats_cache[fid] = {'perc': perc1, 'time': time.time(), 'sot': sot, 'dang': dang, 'corn': corn, 'tot': tot_s}
-                            time.sleep(0.4)
-                        except: pass
-                if fid in stats_cache and stats_cache[fid]['perc'] >= 85:
-                    d = stats_cache[fid]
-                    tg(f"⚽️ PRIMO TEMPO >{d['perc']}%\n⏱️ {m}' {home} {gh}-{ga} {away}\n🌍 {country} {lega}\n📊 TiriP:{d['sot']} Tot:{d['tot']} Pericolosi:{d['dang']} Angoli:{d['corn']}\n🔥 GOL 1° TEMPO!")
-                    preavvisati_1t.add(fid)
-
-            # FIX 50-85 + NO 0-0 dopo 80'
-            if 50 <= m <= 85:
-                if not (m >= 80 and gh == 0 and ga == 0):
-                    cand_schedina_50.append(g)
-
-            if m < 60: continue
-            perc = min(96, 70 + (m-45))
-
-            if 70 <= m <= 92:
-                cand_schedina.append(g)
-
-            if 60 <= m <= 69 and fid not in preavvisati:
-                tg(f"👀 PREPARATI {m}' >{perc}%\n{home} {gh}-{ga} {away}\n🌍 {country} {lega}\n⏳ Al 70' si gioca!")
-                preavvisati.add(fid)
-
-            if 70 <= m <= 92 and fid not in avvisati_squadra:
-                squadra = home if gh <= ga else away
-                tg(f"🔥 GIOCALO ORA {m}' >{perc}%\n{home} {gh}-{ga} {away}\n🌍 {country} {lega}\n⚽️ NEXT GOAL {squadra} >{perc}%")
-                avvisati_squadra.add(fid)
-                avvisati_gol[fid] = gh+ga
-
-        for g in live:
-            fid=g["fixture"]["id"]
-            if fid in avvisati_gol:
-                tot=g["goals"]["home"]+g["goals"]["away"]
-                if tot > avvisati_gol[fid]:
-                    tg(f"✅ GOL VINTO >90%!\n{g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}\n{g['league']['name']}")
-                    del avvisati_gol[fid]
-
-        if time.time() - ultima_schedina > 3600 and len(cand_schedina)>=3:
-            txt="🔥 SCHEDINA Q1.60 >90%\n\n"
-            for g in cand_schedina[:3]:
-                m=g["fixture"]["status"]["elapsed"]
-                txt+=f"{m}' {g['league']['country']} {g['teams']['home']['name']} vs {g['teams']['away']['name']}\n\n"
-            tg(txt); ultima_schedina=time.time()
-
-        if time.time() - ultima_schedina_30 > 1800 and len(cand_schedina_50)>=4:
-            cand_schedina_50 = sorted(cand_schedina_50, key=lambda x: x["fixture"]["status"]["elapsed"] or 0, reverse=True)
-            txt = f"📋 SCHEDINA 4 PARTITE >80% - {now.strftime('%H:%M')}\nDal 50' all' 85' (no 0-0 morti)\n\n"
-            for g in cand_schedina_50[:4]:
-                m=g["fixture"]["status"]["elapsed"]
-                perc = min(96, 70 + (m-45))
-                txt+=f"⏱️ {m}' >{perc}% {g['league']['country']}\n{g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}\n\n"
-            txt+="🔥 NEXT GOAL >80%!"
-            tg(txt); ultima_schedina_30=time.time()
-
-        time.sleep(60)
-    except Exception as e:
-        print(f"LOOP ERR {e}", flush=True); time.sleep(30)
+                fix = [x for x in fix if
