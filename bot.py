@@ -7,7 +7,7 @@ API_FOOTBALL_KEY=os.getenv("API_FOOTBALL_KEY")
 ITALY=timezone(timedelta(hours=2))
 app=Flask(__name__)
 @app.route('/')
-def home():return "BOT OK 30"
+def home():return "BOT OK 30 - TUTTO A POSTO"
 threading.Thread(target=lambda:app.run(host='0.0.0.0',port=int(os.environ.get("PORT",10000))),daemon=True).start()
 def tg(m):
  print(m,flush=True)
@@ -44,7 +44,7 @@ def check_vincita(fid,tipo):
   return None
  except:return None
 time.sleep(3)
-tg("✅ BOT 30 + PROG 1.50 ATTIVO")
+tg("✅ BOT FINALE - TUTTO A POSTO - 2 SCHEDINE 30MIN")
 avvisati_gol={};avvisati_squadra=set();preavvisati=set();preavvisati_1t=set();stats_cache={};bombe_fatte=False;ultimo_hb=0;ultima_schedina=0;ultima_pre_schedina=0
 def get_stat(arr,nome):
  for s in arr:
@@ -67,11 +67,11 @@ while True:
    if lc=="LIMIT":time.sleep(3600);continue
    tg(f"✅ VIVO - {len(lc)} live - {now.strftime('%H:%M')}")
    ultimo_hb=time.time()
-  if now.hour==7 and now.minute<30 and not bombe_fatte:
+  if not bombe_fatte and now.hour>=7 and now.hour<9:
    fix=api_get(f"https://v3.football.api-sports.io/fixtures?date={now.strftime('%Y-%m-%d')}")
    fix=[x for x in fix if x['fixture']['status']['short']=='NS']
    bombe=[];madre_save=[];cand_prog=[]
-   for g in fix[:80]:
+   for g in fix[:90]:
     if len(bombe)>=30:break
     odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={g['fixture']['id']}")
     if odds=="LIMIT":time.sleep(3600);continue
@@ -86,7 +86,13 @@ while True:
          base={"id":g['fixture']['id'],"match":f"{g['teams']['home']['name']} vs {g['teams']['away']['name']}","ora":ora,"quota":q,"tipo":f"{bet['name']} {v['value']}"}
          if bet["name"]=="Match Winner" and 1.02<=q<=1.08:
           if len(bombe)<30:bombe.append(f"{ora} {g['teams']['home']['name']} vs {g['teams']['away']['name']} Q{q}\n");madre_save.append(base)
-         if 1.08<=q<=1.30:cand_prog.append(base)
+         if 1.08<=q<=1.30:
+          bn=bet["name"].lower();val=v["value"].lower();safe=False
+          if "match winner" in bn and "home" in val:safe=True
+          if "goals over/under" in bn and ("over 0.5" in val or "over 1.5" in val):safe=True
+          if "home team score" in bn or "team to score" in bn or ("home" in bn and "score" in bn):safe=True
+          if "double chance" in bn and "x2" in val:safe=True
+          if safe:cand_prog.append(base)
         except:pass
     time.sleep(0.4)
    if bombe:
@@ -115,7 +121,7 @@ while True:
   if len(live)==0:time.sleep(180);continue
   if len(live)>=4:TTL_STATS=120;SLEEP_LOOP=60
   else:TTL_STATS=300;SLEEP_LOOP=75
-  cand_schedina=[];cand_pre_schedina=[]
+  cand_schedina=[];cand_pre_55=[]
   for g in live:
    m=g["fixture"]["status"]["elapsed"]or 0
    if m<20 or m>92:continue
@@ -133,6 +139,7 @@ while True:
       if sot>=5 and dang>=35:perc=92
       elif sot>=4 and dang>=28:perc=89
       elif sot>=3 and dang>=25 and tot>=7:perc=86
+      elif sot>=2 and dang>=20:perc=82
       stats_cache[fid]={'perc':perc,'sot':sot,'time':time.time()}
       time.sleep(0.4)
     except:pass
@@ -142,7 +149,9 @@ while True:
     if d.get('perc',0)>=85 and d.get('sot',0)>=3:tg(f"⚽️ 1T >{d['perc']}% {m}' {home} {gh}-{ga} {away} TiriP:{d['sot']}");preavvisati_1t.add(fid)
    if m>=60 and sot_tot<5:continue
    if 70<=m<=85:cand_schedina.append(g)
-   if 60<=m<=69:cand_pre_schedina.append(g)
+   if 55<=m<=69:
+    dd=stats_cache.get(fid,{})
+    if dd.get('perc',0)>=80:cand_pre_55.append(g)
    if m<60:continue
    perc=min(96,70+(m-45))
    if 60<=m<=69 and fid not in preavvisati:tg(f"👀 PREPARATI {m}' >{perc}% TiriP:{sot_tot} {home} {gh}-{ga} {away}");preavvisati.add(fid)
@@ -155,12 +164,14 @@ while True:
    if fid in avvisati_gol:
     tot=g["goals"]["home"]+g["goals"]["away"]
     if tot>avvisati_gol[fid]:tg(f"✅ GOL VINTO! {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}");del avvisati_gol[fid]
-  if time.time()-ultima_pre_schedina>3000 and len(cand_pre_schedina)>=3:
-   txt=f"👀 PREPARATI 10 MIN - 70'! {now.strftime('%H:%M')}\n\n"
-   for g in cand_pre_schedina[:4]:txt+=f"{g['fixture']['status']['elapsed']}' TiriP:{get_sot(g['fixture']['id'])} {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}\n\n"
+  if time.time()-ultima_pre_schedina>1800 and len(cand_pre_55)>=3:
+   txt=f"👀 PRE-SCHEDINA 55' >80% - TRA 10 MIN! {now.strftime('%H:%M')}\n\n"
+   for g in cand_pre_55[:4]:
+    dd=stats_cache.get(g['fixture']['id'],{})
+    txt+=f"{g['fixture']['status']['elapsed']}' {dd.get('perc',0)}% TiriP:{get_sot(g['fixture']['id'])} {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}\n\n"
    tg(txt);ultima_pre_schedina=time.time()
-  if time.time()-ultima_schedina>3600 and len(cand_schedina)>=3:
-   txt=f"🔥 SCHEDINA 70' >90% {now.strftime('%H:%M')}\n\n"
+  if time.time()-ultima_schedina>1800 and len(cand_schedina)>=3:
+   txt=f"🔥 SCHEDINA 70' >90% - 4 PARTITE {now.strftime('%H:%M')}\n\n"
    for g in cand_schedina[:4]:txt+=f"{g['fixture']['status']['elapsed']}' TiriP:{get_sot(g['fixture']['id'])} {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}\n\n"
    tg(txt);ultima_schedina=time.time()
   if now.hour==23 and now.minute>=30 and now.minute<35:
