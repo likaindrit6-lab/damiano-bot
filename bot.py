@@ -7,7 +7,7 @@ API_FOOTBALL_KEY=os.getenv("API_FOOTBALL_KEY")
 ITALY=timezone(timedelta(hours=2))
 app=Flask(__name__)
 @app.route('/')
-def home():return "BOT 10-24"
+def home():return "BOT 10-24 RISPARMIO"
 threading.Thread(target=lambda:app.run(host='0.0.0.0',port=int(os.environ.get("PORT",10000))),daemon=True).start()
 def tg(m):
  print(m,flush=True)
@@ -44,7 +44,7 @@ def check_vincita(fid,tipo):
   return None
  except:return None
 time.sleep(3)
-tg("✅ BOT 10:00-24:00 ATTIVO")
+tg("✅ BOT 10:00-24:00 ATTIVO - 4 ORE")
 avvisati_gol={};avvisati_squadra=set();preavvisati=set();preavvisati_1t=set();stats_cache={};bombe_fatte=False;ultimo_hb=0;ultima_schedina=0;ultima_pre_schedina=0
 def get_stat(arr,nome):
  for s in arr:
@@ -59,11 +59,10 @@ def get_sot(fid):
 while True:
  try:
   now=datetime.now(ITALY)
-  # DORME DA MEZZANOTTE ALLE 10:00
   if 0<=now.hour<10:
    if now.hour==0:bombe_fatte=False;avvisati_squadra.clear();preavvisati.clear();preavvisati_1t.clear();avvisati_gol.clear();stats_cache.clear()
    time.sleep(1800);continue
-  if time.time()-ultimo_hb>900:
+  if time.time()-ultimo_hb>14400: # <--- 4 ORE QUI
    lc=api_get("https://v3.football.api-sports.io/fixtures?live=all")
    if lc=="LIMIT":time.sleep(3600);continue
    tg(f"✅ VIVO - {len(lc)} live - {now.strftime('%H:%M')}")
@@ -120,8 +119,8 @@ while True:
   live=api_get("https://v3.football.api-sports.io/fixtures?live=all")
   if live=="LIMIT":time.sleep(3600);continue
   if len(live)==0:time.sleep(180);continue
-  if len(live)>=4:TTL_STATS=120;SLEEP_LOOP=60
-  else:TTL_STATS=300;SLEEP_LOOP=75
+  if len(live)>=4:TTL_STATS=600;SLEEP_LOOP=300
+  else:TTL_STATS=600;SLEEP_LOOP=300
   cand_schedina=[];cand_pre_55=[]
   for g in live:
    m=g["fixture"]["status"]["elapsed"]or 0
