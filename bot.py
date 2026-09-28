@@ -7,7 +7,7 @@ API_FOOTBALL_KEY=os.getenv("API_FOOTBALL_KEY")
 ITALY=timezone(timedelta(hours=2))
 app=Flask(__name__)
 @app.route('/')
-def home():return "BOT OK 30 - TUTTO A POSTO"
+def home():return "BOT 10-24"
 threading.Thread(target=lambda:app.run(host='0.0.0.0',port=int(os.environ.get("PORT",10000))),daemon=True).start()
 def tg(m):
  print(m,flush=True)
@@ -44,7 +44,7 @@ def check_vincita(fid,tipo):
   return None
  except:return None
 time.sleep(3)
-tg("✅ BOT FINALE - TUTTO A POSTO - 2 SCHEDINE 30MIN")
+tg("✅ BOT 10:00-24:00 ATTIVO")
 avvisati_gol={};avvisati_squadra=set();preavvisati=set();preavvisati_1t=set();stats_cache={};bombe_fatte=False;ultimo_hb=0;ultima_schedina=0;ultima_pre_schedina=0
 def get_stat(arr,nome):
  for s in arr:
@@ -59,7 +59,8 @@ def get_sot(fid):
 while True:
  try:
   now=datetime.now(ITALY)
-  if 0<=now.hour<7:
+  # DORME DA MEZZANOTTE ALLE 10:00
+  if 0<=now.hour<10:
    if now.hour==0:bombe_fatte=False;avvisati_squadra.clear();preavvisati.clear();preavvisati_1t.clear();avvisati_gol.clear();stats_cache.clear()
    time.sleep(1800);continue
   if time.time()-ultimo_hb>900:
@@ -67,7 +68,7 @@ while True:
    if lc=="LIMIT":time.sleep(3600);continue
    tg(f"✅ VIVO - {len(lc)} live - {now.strftime('%H:%M')}")
    ultimo_hb=time.time()
-  if not bombe_fatte and now.hour>=7 and now.hour<9:
+  if not bombe_fatte and now.hour>=10 and now.hour<11:
    fix=api_get(f"https://v3.football.api-sports.io/fixtures?date={now.strftime('%Y-%m-%d')}")
    fix=[x for x in fix if x['fixture']['status']['short']=='NS']
    bombe=[];madre_save=[];cand_prog=[]
