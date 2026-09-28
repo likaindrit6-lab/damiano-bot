@@ -1,4 +1,3 @@
-
 import os,time,requests,threading,json
 from flask import Flask
 from datetime import datetime,timezone,timedelta
@@ -45,7 +44,7 @@ def check_vincita(fid,tipo):
   return None
  except:return None
 time.sleep(3)
-tg("✅ BOT FINALE - TUTTO A POSTO - VIVO 120SEC")
+tg("✅ BOT FINALE - TUTTO A POSTO - VIVO 20MIN")
 avvisati_gol={};avvisati_squadra=set();preavvisati=set();preavvisati_1t=set();stats_cache={};bombe_fatte=False;ultimo_hb=0;ultima_schedina=0;ultima_pre_schedina=0
 def get_stat(arr,nome):
  for s in arr:
@@ -63,10 +62,10 @@ while True:
   if 0<=now.hour<7:
    if now.hour==0:bombe_fatte=False;avvisati_squadra.clear();preavvisati.clear();preavvisati_1t.clear();avvisati_gol.clear();stats_cache.clear()
    time.sleep(1800);continue
-  if time.time()-ultimo_hb>120:
+  if time.time()-ultimo_hb>1200:
    lc=api_get("https://v3.football.api-sports.io/fixtures?live=all")
    if lc=="LIMIT":time.sleep(3600);continue
-   tg(f"✅ VIVO - {len(lc)} live - {now.strftime('%H:%M:%S')} - 120SEC")
+   tg(f"✅ VIVO - {len(lc)} live - {now.strftime('%H:%M:%S')} - 20MIN")
    ultimo_hb=time.time()
   if not bombe_fatte and now.hour>=7 and now.hour<9:
    fix=api_get(f"https://v3.football.api-sports.io/fixtures?date={now.strftime('%Y-%m-%d')}")
