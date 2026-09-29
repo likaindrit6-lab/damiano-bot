@@ -7,7 +7,7 @@ API_FOOTBALL_KEY=os.getenv("API_FOOTBALL_KEY")
 ITALY=timezone(timedelta(hours=2))
 app=Flask(__name__)
 @app.route('/')
-def home():return "BOT OK 30 - TUTTO A POSTO"
+def home():return "BOT OK 30 - MADRE 10:00 + AVVISO VINTA/PERSA"
 threading.Thread(target=lambda:app.run(host='0.0.0.0',port=int(os.environ.get("PORT",10000))),daemon=True).start()
 def tg(m):
  print(m,flush=True)
@@ -43,9 +43,10 @@ def check_vincita(fid,tipo):
   if"casa segna"in t:return gh>=1
   return None
  except:return None
+
 time.sleep(3)
-tg("✅ BOT FINALE - TUTTO A POSTO - VIVO 20MIN")
-avvisati_gol={};avvisati_squadra=set();preavvisati=set();preavvisati_1t=set();stats_cache={};bombe_fatte=False;ultimo_hb=0;ultima_schedina=0;ultima_pre_schedina=0
+tg("✅ BOT FINALE - MADRE 10:00 + AVVISO HAI VINTO/PERSO ATTIVO")
+avvisati_gol={};avvisati_squadra=set();preavvisati=set();preavvisati_1t=set();stats_cache={};bombe_fatte=False;madre_fatta=False;ultimo_hb=0;ultima_schedina=0;ultima_pre_schedina=0;ultimo_check_vincita=0
 def get_stat(arr,nome):
  for s in arr:
   if s['type']==nome:
@@ -60,7 +61,7 @@ while True:
  try:
   now=datetime.now(ITALY)
   if 0<=now.hour<7:
-   if now.hour==0:bombe_fatte=False;avvisati_squadra.clear();preavvisati.clear();preavvisati_1t.clear();avvisati_gol.clear();stats_cache.clear()
+   if now.hour==0:bombe_fatte=False;madre_fatta=False;avvisati_squadra.clear();preavvisati.clear();preavvisati_1t.clear();avvisati_gol.clear();stats_cache.clear()
    time.sleep(1800);continue
   if time.time()-ultimo_hb>1200:
    lc=api_get("https://v3.football.api-sports.io/fixtures?live=all")
@@ -70,9 +71,8 @@ while True:
   if not bombe_fatte and now.hour>=7 and now.hour<9:
    fix=api_get(f"https://v3.football.api-sports.io/fixtures?date={now.strftime('%Y-%m-%d')}")
    fix=[x for x in fix if x['fixture']['status']['short']=='NS']
-   bombe=[];madre_save=[];cand_prog=[]
+   cand_prog=[]
    for g in fix[:90]:
-    if len(bombe)>=30:break
     odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={g['fixture']['id']}")
     if odds=="LIMIT":time.sleep(3600);continue
     if not odds:time.sleep(0.2);continue
@@ -84,8 +84,6 @@ while True:
          q=float(v["odd"])
          ora=datetime.fromisoformat(g['fixture']['date'].replace('Z','+00:00')).astimezone(ITALY).strftime('%H:%M')
          base={"id":g['fixture']['id'],"match":f"{g['teams']['home']['name']} vs {g['teams']['away']['name']}","ora":ora,"quota":q,"tipo":f"{bet['name']} {v['value']}"}
-         if bet["name"]=="Match Winner" and 1.02<=q<=1.08:
-          if len(bombe)<30:bombe.append(f"{ora} {g['teams']['home']['name']} vs {g['teams']['away']['name']} Q{q}\n");madre_save.append(base)
          if 1.08<=q<=1.30:
           bn=bet["name"].lower();val=v["value"].lower();safe=False
           if "match winner" in bn and "home" in val:safe=True
@@ -95,10 +93,6 @@ while True:
           if safe:cand_prog.append(base)
         except:pass
     time.sleep(0.4)
-   if bombe:
-    txt=f"💣 MADRE 30 - {now.strftime('%d/%m %H:%M')}\n\n"
-    for i,b in enumerate(bombe,1):txt+=f"{i}. {b}\n"
-    tg(txt);salva_file(f"madre_{now.strftime('%Y-%m-%d')}",madre_save)
    cand_prog=sorted(cand_prog,key=lambda x:x['quota'])
    visti=set();filtr=[]
    for c in cand_prog:
@@ -114,8 +108,82 @@ while True:
     salva_file("prog_settimanale",sett)
     txt2=f"📈 PROG {now.strftime('%d/%m')} Giorno {len(sett)}/7 - Q{round(tot,2)} {len(finale)} PARTITE\n\n"
     for i,b in enumerate(finale,1):txt2+=f"{i}. {b['ora']} {b['match']} {b['tipo']} Q{b['quota']}\n"
+    txt2+="\n⏳ Ti avviso io se HAI VINTO/PERSO quando finiscono!"
     tg(txt2)
    bombe_fatte=True
+  if not madre_fatta and now.hour>=10 and now.hour<11:
+   monday = now - timedelta(days=now.weekday())
+   bombe=[];madre_save=[];visti_madre=set()
+   for i in range(7):
+    giorno = (monday + timedelta(days=i)).strftime('%Y-%m-%d')
+    fix=api_get(f"https://v3.football.api-sports.io/fixtures?date={giorno}")
+    fix=[x for x in fix if x['fixture']['status']['short']=='NS']
+    for g in fix:
+     if len(bombe)>=30:break
+     if g['fixture']['id'] in visti_madre:continue
+     odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={g['fixture']['id']}")
+     if odds=="LIMIT":time.sleep(3600);continue
+     if not odds:continue
+     for o in odds:
+      for bk in o.get("bookmakers",[])[:3]:
+       for bet in bk.get("bets",[]):
+        if "Goals Over/Under" in bet["name"] or "Over/Under" in bet["name"]:
+         for v in bet["values"]:
+          try:
+           val=v["value"].lower()
+           if "over 1.5" in val:
+            q=float(v["odd"])
+            if 1.02 <= q <= 1.25:
+             if g['fixture']['id'] not in visti_madre:
+              ora_day=datetime.fromisoformat(g['fixture']['date'].replace('Z','+00:00')).astimezone(ITALY).strftime('%d/%m %H:%M')
+              bombe.append(f"{ora_day} {g['teams']['home']['name']} vs {g['teams']['away']['name']} OVER 1.5 Q{q}\n")
+              madre_save.append({"id":g['fixture']['id'],"match":f"{g['teams']['home']['name']} vs {g['teams']['away']['name']}","ora":ora_day,"quota":q,"tipo":f"Over 1.5"})
+              visti_madre.add(g['fixture']['id'])
+              if len(bombe)>=30:break
+          except:pass
+       if len(bombe)>=30:break
+      if len(bombe)>=30:break
+     time.sleep(0.25)
+    if len(bombe)>=30:break
+   if bombe:
+    txt=f"💣 MADRE 30 - OVER 1.5 90%+ {now.strftime('%d/%m %H:%M')} - {len(bombe)} PARTITE LUN-DOM\n\n"
+    for i,b in enumerate(bombe,1):txt+=f"{i}. {b}\n"
+    txt+="\n⏳ Ti avviso io se HAI VINTO/PERSO quando finiscono tutte!"
+    tg(txt);salva_file(f"madre_{now.strftime('%Y-%m-%d')}",madre_save)
+   else:
+    tg(f"⚠️ MADRE 30 - Nessuna partita Over 1.5 >90% trovata lun-dom")
+   madre_fatta=True
+
+  # NUOVO - CONTROLLO VINCITA OGNI ORA PER AVVISARTI IN MACCHINA
+  if time.time() - ultimo_check_vincita > 1800: # ogni 30 min controlla
+   ultimo_check_vincita = time.time()
+   for nome_file in [f"prog_{now.strftime('%Y-%m-%d')}", f"madre_{now.strftime('%Y-%m-%d')}"]:
+    data = leggi_file(nome_file)
+    if not data: continue
+    # evita di avvisare 2 volte
+    check_nome = f"esito_{nome_file}"
+    if leggi_file(check_nome): continue
+
+    risultati = []
+    for p in data:
+     r = check_vincita(p['id'], p['tipo'])
+     risultati.append(r)
+     time.sleep(0.3)
+
+    if all(r is not None for r in risultati): # tutte finite
+     vinte = sum(1 for r in risultati if r == True)
+     if "madre" in nome_file:
+      if vinte == len(risultati):
+       tg(f"✅✅ MADRE 30 HAI VINTO!!! {vinte}/{len(risultati)} TUTTE PRESE! 💰💰💰")
+      else:
+       tg(f"❌ MADRE 30 HAI PERSO - {vinte}/{len(risultati)} prese - Mancano {len(risultati)-vinte}")
+     else:
+      if vinte == len(risultati):
+       tg(f"✅✅✅ PROG 1.50 HAI VINTO!!! {vinte}/{len(risultati)} 💰")
+      else:
+       tg(f"❌ PROG 1.50 HAI PERSO - {vinte}/{len(risultati)}")
+     salva_file(check_nome, {"vinte": vinte, "tot": len(risultati)})
+
   live=api_get("https://v3.football.api-sports.io/fixtures?live=all")
   if live=="LIMIT":time.sleep(3600);continue
   if len(live)==0:time.sleep(180);continue
