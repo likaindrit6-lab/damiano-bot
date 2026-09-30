@@ -25,11 +25,12 @@ def api_get(url):
     except: return []
 
 time.sleep(3)
-tg("BOT ATTIVO SENZA 1T")
+tg("BOT ATTIVO 1T 3 TIRI 0-45")
 
 avvisati_gol = {}
 avvisati_squadra = set()
 preavvisati = set()
+preavvisati_1t = set()
 stats_cache = {}
 bombe_fatte = False
 ultimo_hb = 0
@@ -56,6 +57,7 @@ while True:
                 bombe_fatte=False
                 avvisati_squadra.clear()
                 preavvisati.clear()
+                preavvisati_1t.clear()
                 avvisati_gol.clear()
                 stats_cache.clear()
             time.sleep(1800)
@@ -109,14 +111,16 @@ while True:
 
         for g in live:
             m = g["fixture"]["status"]["elapsed"] or 0
-            if m < 20 or m > 92: continue
+            if m < 1 or m > 92: continue
             fid = g["fixture"]["id"]
             home = g['teams']['home']['name']
             away = g['teams']['away']['name']
             gh = g['goals']['home']
             ga = g['goals']['away']
             d = stats_cache.get(fid)
-            if not d or time.time() - d.get('time',0) > TTL_STATS:
+            # refresh piu veloce nel 1T
+            need = 60 if m <= 45 else TTL_STATS
+            if not d or time.time() - d.get('time',0) > need:
                 try:
                     st = api_get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
                     if st and len(st)>=2:
@@ -133,6 +137,14 @@ while True:
                         time.sleep(0.4)
                 except: pass
             sot_tot = get_sot(fid)
+
+            # 1T 3 TIRI COME VUOI TU - 0 A 45 QUALSIASI CAMPIONATO
+            if fid not in preavvisati_1t:
+                if 1 <= m <= 45:
+                    if sot_tot >= 3:
+                        msg = f"1T {m} Tiri:{sot_tot} {home} {gh}-{ga} {away}"
+                        tg(msg)
+                        preavvisati_1t.add(fid)
 
             if m >= 60 and sot_tot < 5: continue
             if 70 <= m <= 85: cand_schedina.append(g)
@@ -172,10 +184,4 @@ while True:
             txt=f"SCHEDINA 70 90% {now.strftime('%H:%M')}\n"
             for g in cand_schedina[:4]:
                 txt+=f"{g['fixture']['status']['elapsed']} Tiri:{get_sot(g['fixture']['id'])} {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}\n"
-            tg(txt)
-            ultima_schedina=time.time()
-
-        time.sleep(SLEEP_LOOP)
-    except Exception as e:
-        print(f"ERR {e}", flush=True)
-        time.sleep(30)
+            tg
