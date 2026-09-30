@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "BOT OK 30 - TUTTO A POSTO - 1T 3 TIRI"
+    return "BOT OK - 1T 20-45 3 TIRI 2MIN"
 
 threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000))), daemon=True).start()
 
@@ -52,7 +52,7 @@ def leggi_file(nome):
 def check_vincita(fid, tipo):
     try:
         fx = api_get(f"https://v3.football.api-sports.io/fixtures?id={fid}")
-        if not fx:
+        if not fx or len(fx)==0:
             return None
         f = fx[0]
         if f['fixture']['status']['short'] not in ['FT', 'AET', 'PEN']:
@@ -77,7 +77,7 @@ def check_vincita(fid, tipo):
         return None
 
 time.sleep(3)
-tg("✅ BOT ATTIVO - 1T DAL 1' AL 45' CON 3 TIRI MONDO")
+tg("✅ BOT ATTIVO - 1T DAL 20' AL 45' 3 TIRI OGNI 2 MIN")
 
 avvisati_gol = {}
 avvisati_squadra = set()
@@ -171,14 +171,12 @@ while True:
                                     if safe:
                                         cand_prog.append(base)
                 time.sleep(0.4)
-
             if bombe:
                 txt = f"💣 MADRE 30 - {now.strftime('%d/%m %H:%M')}\n\n"
                 for i, b in enumerate(bombe, 1):
                     txt += f"{i}. {b}\n"
                 tg(txt)
                 salva_file(f"madre_{now.strftime('%Y-%m-%d')}", madre_save)
-
             cand_prog = sorted(cand_prog, key=lambda x: x['quota'])
             visti = set()
             filtr = []
@@ -210,22 +208,19 @@ while True:
             time.sleep(3600)
             continue
         if len(live) == 0:
-            time.sleep(180)
+            time.sleep(120)
             continue
 
-        if len(live) >= 4:
-            TTL_STATS = 120
-            SLEEP_LOOP = 60
-        else:
-            TTL_STATS = 300
-            SLEEP_LOOP = 75
+        # MODIFICA DAMI: OGNI 2 MINUTI
+        SLEEP_LOOP = 120
+        TTL_STATS = 120
 
         cand_schedina = []
         cand_pre_55 = []
 
         for g in live:
             m = g["fixture"]["status"]["elapsed"] or 0
-            if m < 1 or m > 92:
+            if m < 20 or m > 92: # MODIFICA: PARTE DA 20'
                 continue
             fid = g["fixture"]["id"]
             home = g['teams']['home']['name']
@@ -234,8 +229,7 @@ while True:
             ga = g['goals']['away']
 
             d = stats_cache.get(fid)
-            need = 30 if m <= 45 else TTL_STATS
-            if not d or time.time() - d.get('time', 0) > need:
+            if not d or time.time() - d.get('time', 0) > TTL_STATS:
                 try:
                     st = api_get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
                     if st and len(st) >= 2:
@@ -260,8 +254,8 @@ while True:
 
             sot_tot = get_sot(fid)
 
-            # TUTTO IL MONDO 1T 3 TIRI - RICHIESTA DAMI
-            if 1 <= m <= 45 and fid not in preavvisati_1t:
+            # MODIFICA DAMI: DAL 20' AL 45' CON 3 TIRI
+            if 20 <= m <= 45 and fid not in preavvisati_1t:
                 if sot_tot >= 3:
                     tg(f"⚽️ 1T {m}' TiriP:{sot_tot} {home} {gh}-{ga} {away}")
                     preavvisati_1t.add(fid)
