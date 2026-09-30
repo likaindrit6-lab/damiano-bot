@@ -25,12 +25,11 @@ def api_get(url):
     except: return []
 
 time.sleep(3)
-tg("✅ BOT RIPARATO ATTIVO - 1T a 2 TIRI")
+tg("✅ BOT RIPARATO ATTIVO - SENZA 1T")
 
 avvisati_gol = {}
 avvisati_squadra = set()
 preavvisati = set()
-preavvisati_1t = set()
 stats_cache = {}
 bombe_fatte = False
 ultimo_hb = 0
@@ -58,7 +57,6 @@ while True:
                 bombe_fatte=False
                 avvisati_squadra.clear()
                 preavvisati.clear()
-                preavvisati_1t.clear()
                 avvisati_gol.clear()
                 stats_cache.clear()
             time.sleep(1800)
@@ -138,47 +136,7 @@ while True:
                 except: pass
 
             sot_tot = get_sot(fid)
-            # 1T ABBASSATO A 2 TIRI
-            if 20 <= m <= 45 and fid not in preavvisati_1t:
-                d = stats_cache.get(fid,{})
-                if d.get('perc',0) >= 75 and d.get('sot',0) >= 2:
-                    tg(f"⚽️ 1T >{d['perc']}% {m}' {home} {gh}-{ga} {away} TiriP:{d['sot']}")
-                    preavvisati_1t.add(fid)
 
             if m >= 60 and sot_tot < 5: continue
             if 70 <= m <= 85: cand_schedina.append(g)
-            if 60 <= m <= 69: cand_pre_schedina.append(g)
-            if m < 60: continue
-            perc = min(96, 70 + (m-45))
-            if 60 <= m <= 69 and fid not in preavvisati:
-                tg(f"👀 PREPARATI {m}' >{perc}% TiriP:{sot_tot} {home} {gh}-{ga} {away}")
-                preavvisati.add(fid)
-            if 70 <= m <= 92 and fid not in avvisati_squadra:
-                squadra = home if gh <= ga else away
-                tg(f"🔥 GIOCALO {m}' >{perc}% TiriP:{sot_tot} {home} {gh}-{ga} {away} NEXT {squadra}")
-                avvisati_squadra.add(fid)
-                avvisati_gol[fid] = gh+ga
-
-        for g in live:
-            fid=g["fixture"]["id"]
-            if fid in avvisati_gol:
-                tot=g["goals"]["home"]+g["goals"]["away"]
-                if tot > avvisati_gol[fid]:
-                    tg(f"✅ GOL VINTO! {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}")
-                    del avvisati_gol[fid]
-
-        if time.time() - ultima_pre_schedina > 3000 and len(cand_pre_schedina)>=3:
-            txt=f"👀 PREPARATI 10 MIN - 70'! {now.strftime('%H:%M')}\n\n"
-            for g in cand_pre_schedina[:4]:
-                txt+=f"{g['fixture']['status']['elapsed']}' TiriP:{get_sot(g['fixture']['id'])} {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}\n\n"
-            tg(txt); ultima_pre_schedina=time.time()
-
-        if time.time() - ultima_schedina > 3600 and len(cand_schedina)>=3:
-            txt=f"🔥 SCHEDINA 70' >90% {now.strftime('%H:%M')}\n\n"
-            for g in cand_schedina[:4]:
-                txt+=f"{g['fixture']['status']['elapsed']}' TiriP:{get_sot(g['fixture']['id'])} {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}\n\n"
-            tg(txt); ultima_schedina=time.time()
-
-        time.sleep(SLEEP_LOOP)
-    except Exception as e:
-        print(f"ERR {e}", flush=True); time.sleep(30)
+            if 60 <= m <= 69
