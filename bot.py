@@ -1,4 +1,3 @@
-
 import os, time, requests, threading
 from flask import Flask
 from datetime import datetime, timezone, timedelta
@@ -53,7 +52,6 @@ def get_sot(fid):
 while True:
     try:
         now = datetime.now(ITALY)
-
         if 0 <= now.hour < 7:
             if now.hour == 0:
                 bombe_fatte=False
@@ -106,7 +104,6 @@ while True:
 
         TTL_STATS = 120 if len(live) >= 4 else 300
         SLEEP_LOOP = 60 if len(live) >= 4 else 75
-
         cand_schedina = []
         cand_pre_schedina = []
 
@@ -118,7 +115,6 @@ while True:
             away = g['teams']['away']['name']
             gh = g['goals']['home']
             ga = g['goals']['away']
-
             d = stats_cache.get(fid)
             if not d or time.time() - d.get('time',0) > TTL_STATS:
                 try:
@@ -127,7 +123,6 @@ while True:
                         hs = st[0]['statistics']
                         aws = st[1]['statistics']
                         sot = get_stat(hs,'Shots on Goal') + get_stat(aws,'Shots on Goal')
-                        tot = get_stat(hs,'Total Shots') + get_stat(aws,'Total Shots')
                         dang = get_stat(hs,'Dangerous Attacks') + get_stat(aws,'Dangerous Attacks')
                         perc = 0
                         if sot >= 4 and dang >= 25: perc = 92
@@ -137,7 +132,21 @@ while True:
                         stats_cache[fid] = {'perc': perc, 'sot': sot, 'time': time.time()}
                         time.sleep(0.4)
                 except: pass
-
             sot_tot = get_sot(fid)
-            # 1T A 2 TIRI - FIXATO
-            if 20 <= m <= 45 and fid not in preav
+
+            # 1T FIX - scritto corto per non andare a capo
+            if fid not in preavvisati_1t:
+                if 20 <= m <= 45:
+                    dc = stats_cache.get(fid,{})
+                    if dc.get('sot',0) >= 2 and dc.get('perc',0) >= 75:
+                        tg(f"⚽️ 1T >{dc['perc']}% {m}' {home} {gh}-{ga} {away} TiriP:{dc['sot']}")
+                        preavvisati_1t.add(fid)
+
+            if m >= 60 and sot_tot < 5: continue
+            if 70 <= m <= 85: cand_schedina.append(g)
+            if 60 <= m <= 69: cand_pre_schedina.append(g)
+            if m < 60: continue
+            perc = min(96, 70 + (m-45))
+            if 60 <= m <= 69:
+                if fid not in preavvisati:
+                    tg(f"👀 PREPARATI {m}' >{perc}% TiriP:{sot_tot} {home} {gh}-{ga} {
