@@ -25,12 +25,11 @@ def api_get(url):
     except: return []
 
 time.sleep(3)
-tg("BOT ATTIVO 1T 2 TIRI")
+tg("BOT ATTIVO SENZA 1T")
 
 avvisati_gol = {}
 avvisati_squadra = set()
 preavvisati = set()
-preavvisati_1t = set()
 stats_cache = {}
 bombe_fatte = False
 ultimo_hb = 0
@@ -57,7 +56,6 @@ while True:
                 bombe_fatte=False
                 avvisati_squadra.clear()
                 preavvisati.clear()
-                preavvisati_1t.clear()
                 avvisati_gol.clear()
                 stats_cache.clear()
             time.sleep(1800)
@@ -135,14 +133,6 @@ while True:
                         time.sleep(0.4)
                 except: pass
             sot_tot = get_sot(fid)
-
-            if fid not in preavvisati_1t:
-                if 20 <= m <= 45:
-                    dc = stats_cache.get(fid,{})
-                    if dc.get('sot',0) >= 2 and dc.get('perc',0) >= 75:
-                        msg = f"1T {m} {dc['perc']}% {home} {gh}-{ga} {away} Tiri:{dc['sot']}"
-                        tg(msg)
-                        preavvisati_1t.add(fid)
 
             if m >= 60 and sot_tot < 5: continue
             if 70 <= m <= 85: cand_schedina.append(g)
