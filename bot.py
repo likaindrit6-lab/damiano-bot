@@ -25,7 +25,7 @@ def api_get(url):
     except: return []
 
 time.sleep(3)
-tg("✅ BOT RIPARATO ATTIVO - ORIGINALE 3 GIORNI FA")
+tg("✅ BOT RIPARATO ATTIVO - 1T a 2 TIRI")
 
 avvisati_gol = {}
 avvisati_squadra = set()
@@ -36,8 +36,6 @@ bombe_fatte = False
 ultimo_hb = 0
 ultima_schedina = 0
 ultima_pre_schedina = 0
-ultima_schedina_30 = 0
-ultima_pre_30 = 0
 
 def get_stat(arr, nome):
     for s in arr:
@@ -66,7 +64,7 @@ while True:
             time.sleep(1800)
             continue
 
-        if time.time() - ultimo_hb > 900:
+        if time.time() - ultimo_hb > 3600:
             lc = api_get("https://v3.football.api-sports.io/fixtures?live=all")
             if lc == "LIMIT":
                 tg("⚠️ LIMIT - pausa 1h"); time.sleep(3600); continue
@@ -105,16 +103,10 @@ while True:
             time.sleep(180)
             continue
 
-        num_live = len(live)
-        if num_live >= 4:
-            TTL_STATS = 120
-            SLEEP_LOOP = 60
-        else:
-            TTL_STATS = 300
-            SLEEP_LOOP = 75
+        TTL_STATS = 120 if len(live) >= 4 else 300
+        SLEEP_LOOP = 60 if len(live) >= 4 else 75
 
         cand_schedina = []
-        cand_schedina_50 = []
         cand_pre_schedina = []
 
         for g in live:
@@ -137,22 +129,24 @@ while True:
                         tot = get_stat(hs,'Total Shots') + get_stat(aws,'Total Shots')
                         dang = get_stat(hs,'Dangerous Attacks') + get_stat(aws,'Dangerous Attacks')
                         perc = 0
-                        if sot >= 5 and dang >= 35: perc = 92
-                        elif sot >= 4 and dang >= 28: perc = 89
-                        elif sot >= 3 and dang >= 25 and tot >= 7: perc = 86
+                        if sot >= 4 and dang >= 25: perc = 92
+                        elif sot >= 3 and dang >= 20: perc = 88
+                        elif sot >= 2 and dang >= 15: perc = 82
+                        elif sot >= 2 and dang >= 10: perc = 75
                         stats_cache[fid] = {'perc': perc, 'sot': sot, 'time': time.time()}
                         time.sleep(0.4)
                 except: pass
 
             sot_tot = get_sot(fid)
+            # 1T ABBASSATO A 2 TIRI
             if 20 <= m <= 45 and fid not in preavvisati_1t:
                 d = stats_cache.get(fid,{})
-                if d.get('perc',0) >= 85 and d.get('sot',0) >=3:
+                if d.get('perc',0) >= 75 and d.get('sot',0) >= 2:
                     tg(f"⚽️ 1T >{d['perc']}% {m}' {home} {gh}-{ga} {away} TiriP:{d['sot']}")
                     preavvisati_1t.add(fid)
 
             if m >= 60 and sot_tot < 5: continue
-            if 70 <= m <= 85: cand_schedina.append(g); cand_schedina_50.append(g)
+            if 70 <= m <= 85: cand_schedina.append(g)
             if 60 <= m <= 69: cand_pre_schedina.append(g)
             if m < 60: continue
             perc = min(96, 70 + (m-45))
