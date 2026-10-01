@@ -57,7 +57,7 @@ while True:
         if len(live) == 0:
             time.sleep(180); continue
 
-        if time.time() - ultimo_hb > 1200:
+        if time.time() - ultimo_hb > 7200: # FIX: ORA OGNI 2 ORE NON OGNI 20 MIN
             tg(f"✅ VIVO - {len(live)} live - {now.strftime('%H:%M')}")
             ultimo_hb = time.time()
 
@@ -69,7 +69,6 @@ while True:
             home = g['teams']['home']['name']; away = g['teams']['away']['name']
             gh = g['goals']['home']; ga = g['goals']['away']
 
-            # PRENDE STATS SOLO SE SERVE DAL 55' IN POI - QUI RISPARMI 6000 RICHIESTE
             sot_tot = stats_cache.get(fid, {}).get('sot', 0)
 
             if m >= 55:
@@ -99,6 +98,6 @@ while True:
                 if tot > avvisati_gol[fid]:
                     tg(f"✅ GOL VINTO! {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}")
                     del avvisati_gol[fid]
-        time.sleep(180)
+        time.sleep(120) # FIX: 2 MIN PER ESSERE PIU REATTIVO
     except Exception as e:
         print(f"ERR {e}", flush=True); time.sleep(30)
