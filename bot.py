@@ -1,10 +1,12 @@
 import os,time,requests,threading
 from flask import Flask
 from datetime import datetime,timezone,timedelta
+
 BOT_TOKEN=os.getenv("BOT_TOKEN")
 CHAT_ID=os.getenv("CHAT_ID")
 API_FOOTBALL_KEY=os.getenv("API_FOOTBALL_KEY")
 ITALY=timezone(timedelta(hours=2))
+
 app=Flask(__name__)
 @app.route('/')
 def home():return "BOT OK"
@@ -14,7 +16,8 @@ def run_flask():
 threading.Thread(target=run_flask,daemon=True).start()
 
 def tg(m):
- try:requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":CHAT_ID,"text":m,"parse_mode":"HTML"},timeout=25)
+ try:
+  requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":CHAT_ID,"text":m,"parse_mode":"HTML"},timeout=25)
  except:pass
 
 def api_get(url):
@@ -45,11 +48,14 @@ while True:
  try:
   now=datetime.now(ITALY)
   if 0<=now.hour<10:
-   if now.hour==0:av_s.clear();pre.clear();pre1.clear();av_g.clear();cache.clear()
+   if now.hour==0:
+    av_s.clear();pre.clear();pre1.clear();av_g.clear();cache.clear()
    time.sleep(1800);continue
   live=api_get("https://v3.football.api-sports.io/fixtures?live=all")
-  if live=="LIMIT":time.sleep(3600);continue
-  if not live:time.sleep(90);continue
+  if live=="LIMIT":
+   time.sleep(3600);continue
+  if not live:
+   time.sleep(90);continue
   for g in live:
    fid=g["fixture"]["id"];st=g["fixture"]["status"]["short"];m=g["fixture"]["status"]["elapsed"]
    if m is None or fid in av_s:continue
@@ -64,11 +70,13 @@ while True:
     return d.get('sot',0)
    if st=="HT" and fid not in pre1:
     so=tiri()
-    if so>=3:tg(f"FINE 1T 45' {pref} | Tiri:{so} | {home} {gh}-{ga} {away}")
+    if so>=3:
+     tg(f"FINE 1T 45' {pref} | Tiri:{so} | {home} {gh}-{ga} {away}")
     pre1.add(fid)
    if 45<=(m or 0)<=69 and fid not in pre:
     so=tiri()
-    if so>=5:tg(f"PREPARATI {m}' {pref} | Tiri:{so} | {home} {gh}-{ga} {away}");pre.add(fid)
+    if so>=5:
+     tg(f"PREPARATI {m}' {pref} | Tiri:{so} | {home} {gh}-{ga} {away}");pre.add(fid)
    if 70<=(m or 0)<=92:
     so=tiri()
     if so>=6:
@@ -80,4 +88,5 @@ while True:
     if tot>av_g[fid]:
      flag=get_flag(g['league']['country']);tg(f"🟢 GOAL VINTO! {flag} {g['league']['country'].upper()} - {g['league']['name']} | {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}");del av_g[fid]
   time.sleep(90)
- except:time.sleep(20)
+ except:
+  time.sleep(20)
