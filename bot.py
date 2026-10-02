@@ -8,16 +8,22 @@ ITALY=timezone(timedelta(hours=2))
 app=Flask(__name__)
 @app.route('/')
 def home():return "BOT OK"
-threading.Thread(target=lambda:app.run(host='0.0.0.0',port=int(os.environ.get("PORT",10000))),daemon=True).start()
+
+def run_flask():
+    app.run(host='0.0.0.0',port=int(os.environ.get("PORT",10000)))
+threading.Thread(target=run_flask,daemon=True).start()
+
 def tg(m):
  try:requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":CHAT_ID,"text":m,"parse_mode":"HTML"},timeout=25)
  except:pass
+
 def api_get(url):
  try:
   r=requests.get(url,headers={"x-apisports-key":API_FOOTBALL_KEY},timeout=30)
   if r.status_code==429:return "LIMIT"
   return r.json().get("response",[])
  except:return []
+
 def get_stat(a,n):
  for s in a:
   if s.get('type')==n:
@@ -27,11 +33,14 @@ def get_stat(a,n):
     return int(str(v).replace('%','').strip()or 0)
    except:return 0
  return 0
+
 def get_flag(p):
  m={"Italy":"🇮🇹","England":"🇬🇧","Spain":"🇪🇸","Germany":"🇩🇪","France":"🇫🇷","Portugal":"🇵🇹","Netherlands":"🇳🇱","Belgium":"🇧🇪","Turkey":"🇹🇷","Brazil":"🇧🇷","Argentina":"🇦🇷","USA":"🇺🇸"}
  return m.get(p,f"[{p.upper()}]")
+
 av_g,av_s,pre,pre1,cache={},set(),set(),set(),{}
-print("BOT V5.1 AVVIATO - NO SPAM",flush=True)
+print("BOT V5.1 FIX - NO SPAM AVVIATO",flush=True)
+
 while True:
  try:
   now=datetime.now(ITALY)
