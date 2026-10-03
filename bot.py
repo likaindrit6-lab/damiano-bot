@@ -28,7 +28,7 @@ def tg(m, chat_id=None):
  try:
   cid = chat_id if chat_id else CHAT_ID
   requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":cid,"text":m,"parse_mode":"HTML"},timeout=25)
- except:pass
+ except: pass
 
 def poll_commands():
     global is_paused, last_update_id
@@ -42,23 +42,26 @@ def poll_commands():
                 for upd in data.get("result", []):
                     last_update_id = upd["update_id"]
                     msg = upd.get("message", {})
-                    txt = msg.get("text", "").lower().strip()
+                    txt_raw = msg.get("text", "").lower().strip()
+                    if not txt_raw: continue
+                    # rimuove @nomebot se scrivi nel gruppo
+                    txt = txt_raw.split("@")[0]
                     from_chat = msg.get("chat", {}).get("id")
-                    if not txt: continue
-                    if txt in ["/pausa", "pausa", "/stop", "stop"]:
+
+                    if txt.startswith("/pausa") or txt in ["pausa","stop","/stop"]:
                         if not is_paused:
                             is_paused = True
-                            tg("🛑 <b>BOT IN PAUSA</b>\nNon consumo più token.\nScrivi <b>/riprendi</b> per ripartire.", from_chat)
-                    elif txt in ["/riprendi", "riprendi", "/start", "start", "/riprendi@bot", "/pausa@bot"]:
-                        if "/start" in txt:
-                            tg(f"✅ Bot Online! Stato: {'PAUSA' if is_paused else 'ATTIVO'}\nComandi: /pausa - /riprendi", from_chat)
-                        if is_paused and "riprendi" in txt:
+                            tg("🛑 <b>BOT IN PAUSA</b>\nNon consumo token.\nScrivi /riprendi per ripartire.", from_chat)
+                        else:
+                            tg("Già in pausa 🛑", from_chat)
+                    elif txt.startswith("/riprendi") or txt in ["riprendi"]:
+                        if is_paused:
                             is_paused = False
-                            tg("✅ <b>BOT RIPRESO</b>\nRicomincio a scansionare!", from_chat)
-                        if "start" not in txt and is_paused and "pausa" in txt:
-                            pass
-                    elif txt.startswith("/"):
-                         tg(f"Comando: {txt} ricevuto. Usa /pausa o /riprendi", from_chat)
+                            tg("✅ <b>BOT RIPRESO</b>\nRicomincio!", from_chat)
+                        else:
+                            tg(f"✅ Bot già ATTIVO!\nStato: ATTIVO\nComandi: /pausa - /riprendi", from_chat)
+                    elif txt.startswith("/start"):
+                        tg(f"✅ Bot Online! Stato: {'PAUSA' if is_paused else 'ATTIVO'}\nComandi:\n/pausa - stop\n/riprendi - riparti", from_chat)
         except Exception as e:
             print(f"Err poll: {e}", flush=True)
         time.sleep(2)
@@ -67,41 +70,43 @@ threading.Thread(target=poll_commands,daemon=True).start()
 def api_get(url):
  try:
   r=requests.get(url,headers={"x-apisports-key":API_FOOTBALL_KEY},timeout=30)
-  if r.status_code==429:return "LIMIT"
+  if r.status_code==429: return "LIMIT"
   return r.json().get("response",[])
- except:return []
+ except: return []
+
 def get_stat(a,n):
  for s in a:
   if s.get('type')==n:
    try:
     v=s.get('value')
-    if v is None:return 0
-    return int(str(v).replace('%','').strip()or 0)
-   except:return 0
+    if v is None: return 0
+    return int(str(v).replace('%','').strip() or 0)
+   except: return 0
  return 0
+
 def get_flag(p):
  m={"Italy":"🇮🇹","England":"🇬🇧","Spain":"🇪🇸","Germany":"🇩🇪","France":"🇫🇷","Portugal":"🇵🇹","Netherlands":"🇳🇱","Belgium":"🇧🇪","Turkey":"🇹🇷","Brazil":"🇧🇷","Argentina":"🇦🇷","USA":"🇺🇸"}
  return m.get(p,f"[{p.upper()}]")
 
 av_g,av_s,pre,pre1,cache={},set(),set(),set(),{}
-print("BOT V5.4 PAUSA FIX PRIVATO - NO SPAM AVVIATO",flush=True)
+print("BOT V5.5 FIX DEFINITIVO AVVIATO",flush=True)
 while True:
  try:
   if is_paused:
-      time.sleep(15);continue
+      time.sleep(15); continue
   now=datetime.now(ITALY)
   if 0<=now.hour<10:
    if now.hour==0:
     av_s.clear();pre.clear();pre1.clear();av_g.clear();cache.clear()
-   time.sleep(1800);continue
+   time.sleep(1800); continue
   live=api_get("https://v3.football.api-sports.io/fixtures?live=all")
   if live=="LIMIT":
-   time.sleep(3600);continue
+   time.sleep(3600); continue
   if not live:
-   time.sleep(90);continue
+   time.sleep(90); continue
   for g in live:
    fid=g["fixture"]["id"];st=g["fixture"]["status"]["short"];m=g["fixture"]["status"]["elapsed"]
-   if m is None or fid in av_s:continue
+   if m is None or fid in av_s: continue
    home=g['teams']['home']['name'];away=g['teams']['away']['name'];gh=g['goals']['home'];ga=g['goals']['away'];paese=g['league']['country'];lega=g['league']['name'];flag=get_flag(paese);pref=f"{flag} {paese.upper()} - {lega}"
    def tiri():
     d=cache.get(fid)
@@ -113,13 +118,11 @@ while True:
     return d.get('sot',0)
    if st=="HT" and fid not in pre1:
     so=tiri()
-    if so>=3:
-     tg(f"FINE 1T 45' {pref} | Tiri:{so} | {home} {gh}-{ga} {away}")
+    if so>=3: tg(f"FINE 1T 45' {pref} | Tiri:{so} | {home} {gh}-{ga} {away}")
     pre1.add(fid)
    if 45<=(m or 0)<=69 and fid not in pre:
     so=tiri()
-    if so>=5:
-     tg(f"PREPARATI {m}' {pref} | Tiri:{so} | {home} {gh}-{ga} {away} | NEXT");pre.add(fid)
+    if so>=5: tg(f"PREPARATI {m}' {pref} | Tiri:{so} | {home} {gh}-{ga} {away} | NEXT");pre.add(fid)
    if 70<=(m or 0)<=92:
     so=tiri()
     if so>=6:
