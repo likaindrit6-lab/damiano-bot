@@ -10,7 +10,6 @@ ITALY=timezone(timedelta(hours=2))
 is_paused = False
 last_update_id = 0
 
-# --- AUTO-FIX WEBHOOK BLOCCATO ---
 try:
     requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=10)
     print("Webhook pulito!", flush=True)
@@ -25,9 +24,10 @@ def run_flask():
     app.run(host='0.0.0.0',port=int(os.environ.get("PORT",10000)))
 threading.Thread(target=run_flask,daemon=True).start()
 
-def tg(m):
+def tg(m, chat_id=None):
  try:
-  requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":CHAT_ID,"text":m,"parse_mode":"HTML"},timeout=25)
+  cid = chat_id if chat_id else CHAT_ID
+  requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":cid,"text":m,"parse_mode":"HTML"},timeout=25)
  except:pass
 
 def poll_commands():
@@ -41,17 +41,26 @@ def poll_commands():
             if data.get("ok"):
                 for upd in data.get("result", []):
                     last_update_id = upd["update_id"]
-                    txt = upd.get("message", {}).get("text", "").lower().strip()
+                    msg = upd.get("message", {})
+                    txt = msg.get("text", "").lower().strip()
+                    from_chat = msg.get("chat", {}).get("id")
                     if not txt: continue
                     if txt in ["/pausa", "pausa", "/stop", "stop"]:
                         if not is_paused:
                             is_paused = True
-                            tg("🛑 <b>BOT IN PAUSA</b>\nNon consumo più token.\nScrivi <b>/riprendi</b> per ripartire.")
-                    elif txt in ["/riprendi", "riprendi", "/start", "start"]:
-                        if is_paused:
+                            tg("🛑 <b>BOT IN PAUSA</b>\nNon consumo più token.\nScrivi <b>/riprendi</b> per ripartire.", from_chat)
+                    elif txt in ["/riprendi", "riprendi", "/start", "start", "/riprendi@bot", "/pausa@bot"]:
+                        if "/start" in txt:
+                            tg(f"✅ Bot Online! Stato: {'PAUSA' if is_paused else 'ATTIVO'}\nComandi: /pausa - /riprendi", from_chat)
+                        if is_paused and "riprendi" in txt:
                             is_paused = False
-                            tg("✅ <b>BOT RIPRESO</b>\nRicomincio a scansionare!")
-        except: pass
+                            tg("✅ <b>BOT RIPRESO</b>\nRicomincio a scansionare!", from_chat)
+                        if "start" not in txt and is_paused and "pausa" in txt:
+                            pass
+                    elif txt.startswith("/"):
+                         tg(f"Comando: {txt} ricevuto. Usa /pausa o /riprendi", from_chat)
+        except Exception as e:
+            print(f"Err poll: {e}", flush=True)
         time.sleep(2)
 threading.Thread(target=poll_commands,daemon=True).start()
 
@@ -75,7 +84,7 @@ def get_flag(p):
  return m.get(p,f"[{p.upper()}]")
 
 av_g,av_s,pre,pre1,cache={},set(),set(),set(),{}
-print("BOT V5.3 AUTO-FIX - NO SPAM AVVIATO",flush=True)
+print("BOT V5.4 PAUSA FIX PRIVATO - NO SPAM AVVIATO",flush=True)
 while True:
  try:
   if is_paused:
@@ -110,7 +119,7 @@ while True:
    if 45<=(m or 0)<=69 and fid not in pre:
     so=tiri()
     if so>=5:
-     tg(f"PREPARATI {m}' {pref} | Tiri:{so} | {home} {gh}-{ga} {away}");pre.add(fid)
+     tg(f"PREPARATI {m}' {pref} | Tiri:{so} | {home} {gh}-{ga} {away} | NEXT");pre.add(fid)
    if 70<=(m or 0)<=92:
     so=tiri()
     if so>=6:
