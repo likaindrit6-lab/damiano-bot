@@ -7,9 +7,15 @@ CHAT_ID=os.getenv("CHAT_ID")
 API_FOOTBALL_KEY=os.getenv("API_FOOTBALL_KEY")
 ITALY=timezone(timedelta(hours=2))
 
+# --- NUOVO: VARIABILI PAUSA ---
+is_paused = False
+last_update_id = 0
+
 app=Flask(__name__)
 @app.route('/')
-def home():return "BOT OK"
+def home():
+    stato = "PAUSA" if is_paused else "ATTIVO"
+    return f"BOT OK - {stato}"
 
 def run_flask():
     app.run(host='0.0.0.0',port=int(os.environ.get("PORT",10000)))
@@ -19,6 +25,36 @@ def tg(m):
  try:
   requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":CHAT_ID,"text":m,"parse_mode":"HTML"},timeout=25)
  except:pass
+
+# --- NUOVO: ASCOLTA COMANDI TELEGRAM ---
+def poll_commands():
+    global is_paused, last_update_id
+    print("Listener comandi /pausa /riprendi ATTIVO", flush=True)
+    while True:
+        try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={last_update_id+1}&timeout=25"
+            r = requests.get(url, timeout=35)
+            data = r.json()
+            if data.get("ok"):
+                for upd in data.get("result", []):
+                    last_update_id = upd["update_id"]
+                    txt = upd.get("message", {}).get("text", "").lower().strip()
+                    if not txt: continue
+
+                    if txt in ["/pausa", "pausa", "/stop", "stop"]:
+                        if not is_paused:
+                            is_paused = True
+                            tg("🛑 <b>BOT IN PAUSA</b>\n\nNon consumo più token API.\nScrivi <b>/riprendi</b> per ripartire.")
+
+                    elif txt in ["/riprendi", "riprendi", "/start", "start"]:
+                        if is_paused:
+                            is_paused = False
+                            tg("✅ <b>BOT RIPRESO</b>\n\nRicomincio a scansionare le partite!")
+        except:
+            pass
+        time.sleep(2)
+
+threading.Thread(target=poll_commands,daemon=True).start()
 
 def api_get(url):
  try:
@@ -42,10 +78,15 @@ def get_flag(p):
  return m.get(p,f"[{p.upper()}]")
 
 av_g,av_s,pre,pre1,cache={},set(),set(),set(),{}
-print("BOT V5.1 FIX - NO SPAM AVVIATO",flush=True)
+print("BOT V5.2 PAUSA/ RIPRENDI - NO SPAM AVVIATO",flush=True)
 
 while True:
  try:
+  # --- NUOVO: SE IN PAUSA NON CONSUMA ---
+  if is_paused:
+      time.sleep(15)
+      continue
+
   now=datetime.now(ITALY)
   if 0<=now.hour<10:
    if now.hour==0:
