@@ -12,16 +12,16 @@ last_update_id = 0
 
 try:
     requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=10)
-    print("Webhook pulito!", flush=True)
 except: pass
 
 app=Flask(__name__)
 @app.route('/')
 def home():
-    stato = "PAUSA" if is_paused else "ATTIVO"
-    return f"BOT OK - {stato}"
+    return f"BOT V8 DOPPIA OK - {'PAUSA' if is_paused else 'ATTIVO'}", 200
+
 def run_flask():
-    app.run(host='0.0.0.0',port=int(os.environ.get("PORT",10000)))
+    from waitress import serve
+    serve(app, host='0.0.0.0', port=int(os.environ.get("PORT",10000)))
 threading.Thread(target=run_flask,daemon=True).start()
 
 def tg(m, chat_id=None):
@@ -32,38 +32,23 @@ def tg(m, chat_id=None):
 
 def poll_commands():
     global is_paused, last_update_id
-    print("Listener comandi /pausa /riprendi ATTIVO", flush=True)
     while True:
         try:
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={last_update_id+1}&timeout=25"
-            r = requests.get(url, timeout=35)
-            data = r.json()
-            if data.get("ok"):
-                for upd in data.get("result", []):
+            r = requests.get(url, timeout=35).json()
+            if r.get("ok"):
+                for upd in r.get("result", []):
                     last_update_id = upd["update_id"]
                     msg = upd.get("message", {})
-                    txt_raw = msg.get("text", "").lower().strip()
-                    if not txt_raw: continue
-                    # rimuove @nomebot se scrivi nel gruppo
-                    txt = txt_raw.split("@")[0]
-                    from_chat = msg.get("chat", {}).get("id")
-
-                    if txt.startswith("/pausa") or txt in ["pausa","stop","/stop"]:
-                        if not is_paused:
-                            is_paused = True
-                            tg("🛑 <b>BOT IN PAUSA</b>\nNon consumo token.\nScrivi /riprendi per ripartire.", from_chat)
-                        else:
-                            tg("Già in pausa 🛑", from_chat)
-                    elif txt.startswith("/riprendi") or txt in ["riprendi"]:
-                        if is_paused:
-                            is_paused = False
-                            tg("✅ <b>BOT RIPRESO</b>\nRicomincio!", from_chat)
-                        else:
-                            tg(f"✅ Bot già ATTIVO!\nStato: ATTIVO\nComandi: /pausa - /riprendi", from_chat)
-                    elif txt.startswith("/start"):
-                        tg(f"✅ Bot Online! Stato: {'PAUSA' if is_paused else 'ATTIVO'}\nComandi:\n/pausa - stop\n/riprendi - riparti", from_chat)
-        except Exception as e:
-            print(f"Err poll: {e}", flush=True)
+                    txt = msg.get("text","").lower().split("@")[0].strip()
+                    from_chat = msg.get("chat",{}).get("id")
+                    if txt.startswith("/pausa") or txt in ["pausa","stop"]:
+                        is_paused=True; tg("🛑 PAUSA - 0 token", from_chat)
+                    elif txt.startswith("/riprendi") or txt in ["riprendi","/on","/start","on"]:
+                        is_paused=False; tg("✅ RIPRESO - Segnali + Tripla oraria ON", from_chat)
+                    elif txt.startswith("/status"):
+                        tg(f"📊 {'PAUSA' if is_paused else 'ATTIVO'} | Ora: {datetime.now(ITALY).strftime('%H:%M')} | Tripla in coda: {len(tripla_coda)}/3", from_chat)
+        except: pass
         time.sleep(2)
 threading.Thread(target=poll_commands,daemon=True).start()
 
@@ -77,19 +62,19 @@ def api_get(url):
 def get_stat(a,n):
  for s in a:
   if s.get('type')==n:
-   try:
-    v=s.get('value')
-    if v is None: return 0
-    return int(str(v).replace('%','').strip() or 0)
+   try: return int(str(s.get('value') or 0).replace('%','').strip() or 0)
    except: return 0
  return 0
 
 def get_flag(p):
- m={"Italy":"🇮🇹","England":"🇬🇧","Spain":"🇪🇸","Germany":"🇩🇪","France":"🇫🇷","Portugal":"🇵🇹","Netherlands":"🇳🇱","Belgium":"🇧🇪","Turkey":"🇹🇷","Brazil":"🇧🇷","Argentina":"🇦🇷","USA":"🇺🇸"}
- return m.get(p,f"[{p.upper()}]")
+ m={"Italy":"🇮🇹","England":"🇬🇧","Spain":"🇪🇸","Germany":"🇩🇪","France":"🇫🇷","Portugal":"🇵🇹","Netherlands":"🇳🇱","Belgium":"🇧🇪","Turkey":"🇹🇷","Brazil":"🇧🇷","Argentina":"🇦🇷","USA":"🇺🇸","Australia":"🇦🇺","Japan":"🇯🇵","South Korea":"🇰🇷"}
+ return m.get(p,f"[{p}]")
 
 av_g,av_s,pre,pre1,cache={},set(),set(),set(),{}
-print("BOT V5.5 FIX DEFINITIVO AVVIATO",flush=True)
+tripla_coda=[]
+ultimo_invio_tripla=time.time()
+print("BOT V8 DOPPIA - SEGNALI + TRIPLA ORARIA",flush=True)
+
 while True:
  try:
   if is_paused:
@@ -97,42 +82,69 @@ while True:
   now=datetime.now(ITALY)
   if 0<=now.hour<10:
    if now.hour==0:
-    av_s.clear();pre.clear();pre1.clear();av_g.clear();cache.clear()
-   time.sleep(1800); continue
+    av_s.clear();pre.clear();pre1.clear();av_g.clear();cache.clear();tripla_coda.clear()
+   time.sleep(600); continue
+
   live=api_get("https://v3.football.api-sports.io/fixtures?live=all")
-  if live=="LIMIT":
-   time.sleep(3600); continue
-  if not live:
-   time.sleep(90); continue
+  if live=="LIMIT": time.sleep(3600); continue
+  if not live: time.sleep(60); continue
+
+  # --- OGNI ORA SPARA TRIPLA SE CE NE SONO 2-3 ---
+  if time.time() - ultimo_invio_tripla >= 3600 and len(tripla_coda) >= 2:
+      txt = f"🔥🔥🔥 TRIPLA ORARIA QUOTA 3 - {now.strftime('%H:%M')} 🔥🔥🔥\n\n"
+      quota=1
+      for p in tripla_coda[:3]:
+          txt+=f"{p['flag']} {p['pref']} | {p['min']}' | Tiri:{p['sot']} | {p['home']} {p['gh']}-{p['ga']} {p['away']}\n"
+          quota*=1.45
+      txt+=f"\n💰 QUOTA TOT ~{quota:.2f} - Gioca Next Goal"
+      tg(txt)
+      print(f"TRIPLA INVIATA {len(tripla_coda[:3])}",flush=True)
+      tripla_coda = tripla_coda[3:]
+      ultimo_invio_tripla = time.time()
+
   for g in live:
    fid=g["fixture"]["id"];st=g["fixture"]["status"]["short"];m=g["fixture"]["status"]["elapsed"]
    if m is None or fid in av_s: continue
    home=g['teams']['home']['name'];away=g['teams']['away']['name'];gh=g['goals']['home'];ga=g['goals']['away'];paese=g['league']['country'];lega=g['league']['name'];flag=get_flag(paese);pref=f"{flag} {paese.upper()} - {lega}"
    def tiri():
     d=cache.get(fid)
-    if not d or time.time()-d.get('time',0)>300:
+    if not d or time.time()-d.get('time',0)>180:
      s=api_get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
      if s and len(s)>=2:
-      sot=get_stat(s[0]['statistics'],'Shots on Goal')+get_stat(s[1]['statistics'],'Shots on Goal');cache[fid]={'sot':sot,'time':time.time()};time.sleep(0.6);return sot
+      sot=get_stat(s[0]['statistics'],'Shots on Goal')+get_stat(s[1]['statistics'],'Shots on Goal');cache[fid]={'sot':sot,'time':time.time()};time.sleep(0.4);return sot
      return d.get('sot',0) if d else 0
     return d.get('sot',0)
+
+   # 1) SEGNALI NORMALI COME PRIMA - LI VEDI SUBITO
    if st=="HT" and fid not in pre1:
     so=tiri()
-    if so>=3: tg(f"FINE 1T 45' {pref} | Tiri:{so} | {home} {gh}-{ga} {away}")
-    pre1.add(fid)
-   if 45<=(m or 0)<=69 and fid not in pre:
+    if so>=3: tg(f"⏸️ FINE 1T {pref} | Tiri:{so} | {home} {gh}-{ga} {away}");pre1.add(fid)
+
+   if 46<=(m or 0)<=69 and fid not in pre:
     so=tiri()
-    if so>=5: tg(f"PREPARATI {m}' {pref} | Tiri:{so} | {home} {gh}-{ga} {away} | NEXT");pre.add(fid)
-   if 70<=(m or 0)<=92:
+    if so>=5:
+     tg(f"🔔 PREPARATI {m}' {pref} | Tiri:{so} | {home} {gh}-{ga} {away} | NEXT")
+     pre.add(fid)
+
+   if 65<=(m or 0)<=92:
     so=tiri()
-    if so>=6:
-     sq=home if gh<=ga else away;tg(f"GIOCALO {m}' >85% {pref} | Tiri:{so} | {home} {gh}-{ga} {away} | NEXT {sq}");av_s.add(fid);av_g[fid]=gh+ga
+    if so>=4: # PIANO A - SOT 4 dal 65'
+     if fid not in av_s:
+      # SEGNALE ISTANTANEO
+      sq=home if gh<=ga else away
+      tg(f"🔥 GIOCALO {m}' >85% {pref} | Tiri:{so} | {home} {gh}-{ga} {away} | NEXT {sq}")
+      av_s.add(fid);av_g[fid]=gh+ga
+      # IN PIÙ LO AGGIUNGE ALLA TRIPLA ORARIA
+      if not any(x['fid']==fid for x in tripla_coda):
+          tripla_coda.append({'fid':fid,'flag':flag,'pref':f"{paese} - {lega}",'min':m,'sot':so,'home':home,'away':away,'gh':gh,'ga':ga})
+          print(f"Aggiunta tripla {len(tripla_coda)}/3", flush=True)
+
   for g in live:
    fid=g["fixture"]["id"]
    if fid in av_g:
     tot=g["goals"]["home"]+g["goals"]["away"]
     if tot>av_g[fid]:
      flag=get_flag(g['league']['country']);tg(f"🟢 GOAL VINTO! {flag} {g['league']['country'].upper()} - {g['league']['name']} | {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}");del av_g[fid]
-  time.sleep(90)
+  time.sleep(60)
  except:
-  time.sleep(20)
+  time.sleep(15)
