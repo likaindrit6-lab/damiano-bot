@@ -27,7 +27,6 @@ def run_flask():
     serve(app, host='0.0.0.0', port=int(os.environ.get("PORT",10000)))
 threading.Thread(target=run_flask,daemon=True).start()
 
-# --- SOLO QUESTO AGGIUNTO PER PULSANTI FISSI ---
 TASTIERA_JSON = json.dumps({
     "keyboard":[["🟢 ACCENDI","🔴 SPEGNI"],["🎫 BOLLA","📊 STATUS"]],
     "resize_keyboard":True,
@@ -98,13 +97,13 @@ def crea_bolla_15():
                 quota_tot*=best["q"]
                 picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {txt} @ {best['q']}")
             except: continue
-        # --- MODIFICA SOLO QUI PER 5 PARTITE ---
-        # Prima era len<6, ora manda anche con 5 se quota >=3.20
+
+        # FIX CHE MI HAI CHIESTO: manda anche con 5 se quota >=3.00
         if len(picks) < 5:
             return f"Oggi poche partite da 80%, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f}"
-        if len(picks) == 5 and quota_tot < 3.20:
-            return f"Oggi poche partite da 80%, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f} - aspetto 3.20"
-        # ---------------------------------------
+        if len(picks) == 5 and quota_tot < 3.00:
+            return f"Oggi poche partite da 80%, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f} - aspetto 3.00"
+
         return f"🔥 BOLLA ODIERNA 80%+ {OGGI} - Quota {quota_tot:.2f} 🔥\n\n" + "\n\n".join(picks) + f"\n\n💰 TOT {quota_tot:.2f} - {len(picks)} partite - OBIETTIVO 3.20/3.30"
     except Exception as e:
         return f"Errore bolla: {e}"
@@ -121,7 +120,6 @@ def poll_commands():
                     msg = upd.get("message", {})
                     txt = msg.get("text","").lower().split("@")[0].strip()
                     from_chat = msg.get("chat",{}).get("id")
-                    # --- MODIFICA SOLO QUI PER PULSANTI CON EMOJI ---
                     if "spegni" in txt or txt.startswith("/pausa") or txt in ["pausa","stop","🔴 spegni"]:
                         is_paused=True; tg("🛑 PAUSA", from_chat, con_tastiera=True)
                     elif "accendi" in txt or txt.startswith("/riprendi") or txt in ["/on","/start","on","🟢 accendi"]:
@@ -131,7 +129,6 @@ def poll_commands():
                     elif "bolla" in txt or "bola" in txt:
                         tg("⏳ Creo bolla odierna 3.20/3.30...", from_chat)
                         tg(crea_bolla_15(), from_chat, con_tastiera=True)
-                    # -----------------------------------------------
         except: pass
         time.sleep(30 if is_paused else 2)
 
