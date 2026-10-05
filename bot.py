@@ -1,4 +1,4 @@
-import os,time,requests,threading
+import os,time,requests,threading,json
 from flask import Flask
 from datetime import datetime,timezone,timedelta
 
@@ -27,10 +27,20 @@ def run_flask():
     serve(app, host='0.0.0.0', port=int(os.environ.get("PORT",10000)))
 threading.Thread(target=run_flask,daemon=True).start()
 
-def tg(m, chat_id=None):
+# --- SOLO QUESTO AGGIUNTO PER PULSANTI FISSI ---
+TASTIERA_JSON = json.dumps({
+    "keyboard":[["🟢 ACCENDI","🔴 SPEGNI"],["🎫 BOLLA","📊 STATUS"]],
+    "resize_keyboard":True,
+    "is_persistent":True
+})
+
+def tg(m, chat_id=None, con_tastiera=False):
  try:
   cid = chat_id if chat_id else CHAT_ID
-  requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":cid,"text":m,"parse_mode":"HTML"},timeout=25)
+  payload={"chat_id":cid,"text":m,"parse_mode":"HTML"}
+  if con_tastiera:
+      payload["reply_markup"]=TASTIERA_JSON
+  requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json=payload,timeout=25)
  except: pass
 
 def api_get(url):
@@ -71,7 +81,6 @@ def crea_bolla_15():
                         except: continue
                 if not best: continue
                 if quota_tot*best["q"]>3.45: continue
-
                 m_name=best["m"]; m_val=best["e"]
                 if "Match Winner" in m_name:
                     if "Home" in m_val: txt="VINCENTE FINALE: 1"
@@ -86,11 +95,16 @@ def crea_bolla_15():
                     txt=f"{m_val.replace('Over','Over').replace('Under','Under')} GOL"
                 else:
                     txt=f"{m_name}: {m_val}".replace("Home","1").replace("Away","2").replace("Yes","Si").replace("No","No").replace("Draw","X")
-
                 quota_tot*=best["q"]
                 picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {txt} @ {best['q']}")
             except: continue
-        if len(picks)<6: return f"Oggi poche partite da 80%, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f}"
+        # --- MODIFICA SOLO QUI PER 5 PARTITE ---
+        # Prima era len<6, ora manda anche con 5 se quota >=3.20
+        if len(picks) < 5:
+            return f"Oggi poche partite da 80%, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f}"
+        if len(picks) == 5 and quota_tot < 3.20:
+            return f"Oggi poche partite da 80%, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f} - aspetto 3.20"
+        # ---------------------------------------
         return f"🔥 BOLLA ODIERNA 80%+ {OGGI} - Quota {quota_tot:.2f} 🔥\n\n" + "\n\n".join(picks) + f"\n\n💰 TOT {quota_tot:.2f} - {len(picks)} partite - OBIETTIVO 3.20/3.30"
     except Exception as e:
         return f"Errore bolla: {e}"
@@ -107,15 +121,17 @@ def poll_commands():
                     msg = upd.get("message", {})
                     txt = msg.get("text","").lower().split("@")[0].strip()
                     from_chat = msg.get("chat",{}).get("id")
-                    if txt.startswith("/pausa") or txt in ["pausa","stop"]:
-                        is_paused=True; tg("🛑 PAUSA", from_chat)
-                    elif txt.startswith("/riprendi") or txt in ["riprendi","/on","/start","on"]:
-                        is_paused=False; tg("✅ RIPRESO", from_chat)
-                    elif txt.startswith("/status"):
-                        tg(f"📊 {'PAUSA' if is_paused else 'ATTIVO'} | {datetime.now(ITALY).strftime('%H:%M')}", from_chat)
+                    # --- MODIFICA SOLO QUI PER PULSANTI CON EMOJI ---
+                    if "spegni" in txt or txt.startswith("/pausa") or txt in ["pausa","stop","🔴 spegni"]:
+                        is_paused=True; tg("🛑 PAUSA", from_chat, con_tastiera=True)
+                    elif "accendi" in txt or txt.startswith("/riprendi") or txt in ["/on","/start","on","🟢 accendi"]:
+                        is_paused=False; tg("✅ RIPRESO", from_chat, con_tastiera=True)
+                    elif "status" in txt:
+                        tg(f"📊 {'PAUSA' if is_paused else 'ATTIVO'} | {datetime.now(ITALY).strftime('%H:%M')}", from_chat, con_tastiera=True)
                     elif "bolla" in txt or "bola" in txt:
                         tg("⏳ Creo bolla odierna 3.20/3.30...", from_chat)
-                        tg(crea_bolla_15(), from_chat)
+                        tg(crea_bolla_15(), from_chat, con_tastiera=True)
+                    # -----------------------------------------------
         except: pass
         time.sleep(30 if is_paused else 2)
 
