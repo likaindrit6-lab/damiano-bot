@@ -13,62 +13,109 @@ FILE_BOLLA = "ultima_bolla.json"
 def tg(msg):
     try:
         requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=15)
-    except: pass
+    except:
+        pass
 
 def get_fixtures(date_str):
-    r = requests.get(f"{BASE_URL}/fixtures?date={date_str}", headers=HEADERS, timeout=20).json()
-    return r.get("response", [])
+    try:
+        r = requests.get(f"{BASE_URL}/fixtures?date={date_str}", headers=HEADERS, timeout=20).json()
+        return r.get("response", [])
+    except:
+        return []
 
 def get_odd(fid):
     try:
         r = requests.get(f"{BASE_URL}/odds?fixture={fid}", headers=HEADERS, timeout=20).json()
         return r.get("response", [])
-    except: return []
-
-def trova_giocata_sicura(odds_data):
-    sicure=[]
-    try:
-        bets=odds_data[0]["bookmakers"][0]["bets"]
-        for bet in bets:
-            for v in bet["values"]:
-                try:
-                    q=float(v["odd"])
-                    if 1.05<=q<=1.35:
-                        sicure.append({"mercato":bet["name"],"scelta":v["value"],"quota":q})
-                except: continue
-    except: pass
-    sicure=sorted(sicure, key=lambda x:x["quota"])
-    return sicure[0] if sicure else None
+    except:
+        return []
 
 def crea_bolla():
     now_italy = datetime.now(ITALY)
-    OGGI = now_italy.strftime("%Y-%m-%d") # <--- ODIERNA, non domani!
+    OGGI = now_italy.strftime("%Y-%m-%d")
     partite = get_fixtures(OGGI)
 
-    bolla_txt=[]; bolla_save=[]; quota_tot=1.0
+    if not partite:
+        return f"Niente partite oggi {OGGI}"
 
-    for p in sorted(partite, key=lambda x:x["fixture"]["date"])[:80]:
-        if len(bolla_txt)>=5: break
-        if quota_tot>=1.80: break
+    bolla_txt = []
+    bolla_save = []
+    quota_tot = 1.0
 
-        fid=p["fixture"]["id"]
-        dt=datetime.fromisoformat(p["fixture"]["date"].replace("Z","+00:00")).astimezone(ITALY)
-        if dt < now_italy: continue # salta partite già iniziate oggi
-        if dt.hour < 8: continue
+    for p in sorted(partite, key=lambda x: x["fixture"]["date"])[:100]:
+        if len(bolla_txt) >= 3:
+            break
+        if quota_tot >= 1.60:
+            break
 
-        home=p["teams"]["home"]["name"]; away=p["teams"]["away"]["name"]
-        lega=p["league"]["name"]; nazione=p["league"]["country"]
-        orario=dt.strftime("%H:%M")
+        fid = p["fixture"]["id"]
+        dt = datetime.fromisoformat(p["fixture"]["date"].replace("Z", "+00:00")).astimezone(ITALY)
 
-        odds=get_odd(fid)
-        pick=trova_giocata_sicura(odds)
-        if not pick: continue
-        if quota_tot * pick["quota"] > 1.90: continue
+        if dt < now_italy:
+            continue
+        if dt.hour < 8:
+            continue
 
-        quota_tot*=pick["quota"]
-        txt=f"{pick['mercato']} - {pick['scelta']}"
-        bolla_txt.append(f"🕒 {orario} - [{nazione} - {lega}]\n{home} vs {away}\n-> {txt} @ {pick['quota']}")
-        bolla_save.append({"id":fid,"home":home,"away":away,"orario":orario,"quota":pick["quota"],"scelta":txt})
+        home = p["teams"]["home"]["name"]
+        away = p["teams"]["away"]["name"]
+        lega = p["league"]["name"]
+        nazione = p["league"]["country"]
+        orario = dt.strftime("%H:%M")
 
-    if len(bolla_txt)==0:
-        return f"⚠️ Oggi {OG
+        odds = get_odd(fid)
+        if not odds:
+            continue
+
+        try:
+            bets = odds[0]["bookmakers"][0]["bets"]
+            best = None
+            for bet in bets:
+                for v in bet["values"]:
+                    try:
+                        q = float(v["odd"])
+                        if 1.05 <= q <= 1.25:
+                            if best is None or q < best["q"]:
+                                best = {"mercato": bet["name"], "scelta": v["value"], "q": q}
+                    except:
+                        continue
+
+            if not best:
+                continue
+            if quota_tot * best["q"] > 1.70:
+                continue
+
+            quota_tot *= best["q"]
+            txt = f"{best['mercato']} {best['scelta']}"
+            bolla_txt.append(f"{orario} - {nazione} {lega}\n{home} vs {away}\n-> {txt} @ {best['q']}")
+            bolla_save.append({"id": fid, "home": home, "away": away, "orario": orario, "quota": best["q"]})
+
+        except:
+            continue
+
+    if len(bolla_txt) == 0:
+        return f"Oggi {OGGI} dopo le {now_italy.strftime('%H:%M')} niente quotine basse"
+
+    with open(FILE_BOLLA, "w") as f:
+        json.dump({"data": OGGI, "partite": bolla_save, "quota_tot": quota_tot}, f)
+
+    testo = f"BOLLA ODIERNA {OGGI}\nQuota Tot: {quota_tot:.2f} con {len(bolla_txt)} partite\n\n"
+    testo += "\n\n".join(bolla_txt)
+    testo += f"\n\nTotale: {quota_tot:.2f}"
+    return testo
+
+tg("BOT V23 ONLINE - FIXATO")
+
+while True:
+    try:
+        r = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset=-1&timeout=10", timeout=15).json()
+        if r.get("result"):
+            last = r["result"][-1]
+            text = last.get("message", {}).get("text", "").lower()
+            uid = last["update_id"]
+            if "bolla" in text:
+                tg("Cerco 2-3 quotine basse odierne...")
+                tg(crea_bolla())
+                requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={uid+1}", timeout=10)
+    except:
+        pass
+    time.sleep(20)
