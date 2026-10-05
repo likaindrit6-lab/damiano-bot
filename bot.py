@@ -52,6 +52,8 @@ def crea_bolla():
         fid = p["fixture"]["id"]
         home = p["teams"]["home"]["name"]
         away = p["teams"]["away"]["name"]
+        lega = p["league"]["name"]
+        nazione = p["league"]["country"]
         ora_utc = p["fixture"]["date"]
         dt = datetime.fromisoformat(ora_utc.replace("Z", "+00:00")).astimezone(ITALY)
         orario = dt.strftime("%H:%M")
@@ -71,8 +73,8 @@ def crea_bolla():
                         else: segno_show = "X"
 
                         quota_tot *= q
-                        bolla_txt.append(f"🕒 {orario} - {home} vs {away} -> {segno_show} @ {q}")
-                        bolla_save.append({"id": fid, "home": home, "away": away, "orario": orario, "segno": segno_val, "quota": q, "segno_show": segno_show})
+                        bolla_txt.append(f"🕒 {orario} - [{nazione} - {lega}]\n{home} vs {away} -> {segno_show} @ {q}")
+                        bolla_save.append({"id": fid, "home": home, "away": away, "orario": orario, "segno": segno_val, "quota": q, "segno_show": segno_show, "lega": lega, "nazione": nazione})
                         break
         except: continue
         if len(bolla_txt) >= 4: break
@@ -84,7 +86,7 @@ def crea_bolla():
         json.dump({"data": domani, "partite": bolla_save, "quota_tot": quota_tot}, f)
 
     testo = f"🎫 *BOLLA DEL GIORNO - {domani}*\n*Quota Tot: {quota_tot:.2f}*\n\n"
-    testo += "\n".join(bolla_txt)
+    testo += "\n\n".join(bolla_txt)
     testo += f"\n\n💰 *Quota Totale: {quota_tot:.2f}*"
     testo += f"\nGioca 1.50€"
     return testo
@@ -138,7 +140,7 @@ def verifica_bolla():
     return risultato_txt
 
 # --- LOOP ---
-tg("✅ BOT V15 ONLINE - Fixato senza pytz")
+tg("✅ BOT V16 ONLINE - Con Nazione e Campionato")
 
 last_check = ""
 while True:
