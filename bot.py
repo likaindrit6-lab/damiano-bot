@@ -1,6 +1,6 @@
 import os, time, requests, json
 from datetime import datetime, timedelta
-import pytz
+from zoneinfo import ZoneInfo
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
@@ -8,7 +8,7 @@ API_KEY = os.getenv("API_FOOTBALL_KEY")
 
 BASE_URL = "https://v3.football.api-sports.io"
 HEADERS = {"x-apisports-key": API_KEY}
-ITALY = pytz.timezone("Europe/Rome")
+ITALY = ZoneInfo("Europe/Rome")
 FILE_BOLLA = "ultima_bolla.json"
 
 def tg(msg):
@@ -65,8 +65,7 @@ def crea_bolla():
                     vals = sorted(bet["values"], key=lambda x: float(x["odd"]))
                     q = float(vals[0]["odd"])
                     if 1.35 <= q <= 1.85:
-                        segno_val = vals[0]["value"] # Home / Draw / Away
-                        # converti per messaggio
+                        segno_val = vals[0]["value"]
                         if segno_val == "Home": segno_show = f"1 ({home})"
                         elif segno_val == "Away": segno_show = f"2 ({away})"
                         else: segno_show = "X"
@@ -81,7 +80,6 @@ def crea_bolla():
     if len(bolla_txt) < 2:
         return "⚠️ Oggi non ci sono abbastanza quote sicure"
 
-    # SALVA LA BOLLA PER VERIFICARE DOPO SE HA VINTO
     with open(FILE_BOLLA, "w") as f:
         json.dump({"data": domani, "partite": bolla_save, "quota_tot": quota_tot}, f)
 
@@ -140,26 +138,22 @@ def verifica_bolla():
     return risultato_txt
 
 # --- LOOP ---
-tg("✅ BOT V15 ONLINE - Con verifica VINTA/PERSA")
+tg("✅ BOT V15 ONLINE - Fixato senza pytz")
 
 last_check = ""
 while True:
     now = datetime.now(ITALY)
-    ora_min = now.strftime("%H:%M")
 
-    # 10:00 BOLLA NUOVA
     if now.hour == 10 and now.minute == 0:
         tg(crea_bolla())
         time.sleep(70)
 
-    # 00:30 VERIFICA SE HA VINTO IL GIORNO PRIMA (dopo che finiscono le partite)
     if now.hour == 0 and now.minute == 30 and last_check!= now.strftime("%Y-%m-%d"):
         last_check = now.strftime("%Y-%m-%d")
         tg("⏳ Controllo se la bolla di ieri ha vinto...")
         time.sleep(5)
         tg(verifica_bolla())
 
-    # Comandi manuali Telegram
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset=-1&timeout=10"
         r = requests.get(url, timeout=15).json()
