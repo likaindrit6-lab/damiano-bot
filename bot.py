@@ -20,7 +20,7 @@ except: pass
 app=Flask(__name__)
 @app.route('/')
 def home():
-    return f"BOT V10 DOPPIA+BOLLA 1.80 - {'PAUSA' if is_paused else 'ATTIVO'}", 200
+    return f"BOT V9+BOLLA 1.5 ODIERNA - {'PAUSA' if is_paused else 'ATTIVO'}", 200
 
 def run_flask():
     from waitress import serve
@@ -40,75 +40,42 @@ def api_get(url):
   return r.json().get("response",[])
  except: return []
 
-# --- BOLLA ODIERNA QUOTA 1.80 - 80/85% ---
-def crea_bolla_180():
+def crea_bolla_15():
     try:
         OGGI = datetime.now(ITALY).strftime("%Y-%m-%d")
         fixtures = api_get(f"https://v3.football.api-sports.io/fixtures?date={OGGI}")
-        if not fixtures:
-            return f"⚠️ Nessuna partita oggi {OGGI}"
-
-        picks=[]
-        quota_tot=1.0
-        mercati_sicuri = ["Match Winner", "Double Chance", "Goals Over/Under", "Team To Score", "Home Team Over/Under", "Away Team Over/Under"]
-
-        # ordina per orario
+        if not fixtures: return f"Nessuna partita oggi {OGGI}"
+        picks=[]; quota_tot=1.0
         fixtures = sorted(fixtures, key=lambda x: x["fixture"]["timestamp"])
-
         for p in fixtures:
-            if len(picks)>=4: break
-            if quota_tot>=1.85: break
-
+            if len(picks)>=5: break
+            if quota_tot>=1.62: break
             fid=p["fixture"]["id"]
             dt=datetime.fromtimestamp(p["fixture"]["timestamp"], tz=ITALY)
             if dt < datetime.now(ITALY): continue
-            if dt.hour < 10: continue
-
             home=p['teams']['home']['name']; away=p['teams']['away']['name']
             paese=p['league']['country']; lega=p['league']['name']
             orario=dt.strftime("%H:%M")
-
             odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
-            if not odds or odds=="LIMIT": continue
-            if not odds[0].get("bookmakers"): continue
-
+            if not odds or odds=="LIMIT" or not odds[0].get("bookmakers"): continue
             try:
-                bets=odds[0]["bookmakers"][0]["bets"]
                 best=None
-                for bet in bets:
-                    if bet["name"] not in mercati_sicuri:
-                        # permetti anche mercati simili bassi
-                        if "Over/Under" not in bet["name"] and "Double" not in bet["name"] and "Winner" not in bet["name"]:
-                            continue
-                    if "First Half" in bet["name"]: continue
-                    if "Corners" in bet["name"]: continue
-                    if "Cards" in bet["name"]: continue
-
+                for bet in odds[0]["bookmakers"][0]["bets"]:
+                    if "First Half" in bet["name"] or "Corners" in bet["name"] or "Cards" in bet["name"]: continue
                     for v in bet["values"]:
                         try:
                             q=float(v["odd"])
-                            # SOLO QUOTE BASSE 80-85%
-                            if 1.10 <= q <= 1.32:
-                                # evita quote inutili tipo Over 0.5 a 1.05
-                                if q < 1.10: continue
-                                # scegli la quota più alta tra le sicure
+                            if 1.08 <= q <= 1.28: # 80% in su
                                 if best is None or q > best["q"]:
-                                    best={"mercato":bet["name"], "esito":v["value"], "q":q}
+                                    best={"m":bet["name"],"e":v["value"],"q":q}
                         except: continue
-
                 if not best: continue
-                # non sforare 1.90
-                if quota_tot * best["q"] > 1.90: continue
-
-                quota_tot *= best["q"]
-                picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {best['mercato']}: {best['esito']} @ {best['q']}")
+                if quota_tot*best["q"]>1.65: continue
+                quota_tot*=best["q"]
+                picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {best['m']}: {best['e']} @ {best['q']}")
             except: continue
-
-        if len(picks) < 2:
-            return f"Oggi {OGGI} ho trovato {len(fixtures)} partite ma poche con quota 80%. Riprova tra 1 ora, ne arrivano altre."
-
-        txt=f"🔥 BOLLA ODIERNA 80/85% - {OGGI} - Quota {quota_tot:.2f} 🔥\n\n" + "\n\n".join(picks) + f"\n\n💰 QUOTA TOT: {quota_tot:.2f} ({len(picks)} partite)\n🎯 Obiettivo: 1.80"
-        return txt
+        if len(picks)<4: return f"Oggi {OGGI} poche partite da 80%, riprova tra 1h. Trovate {len(picks)}."
+        return f"🔥 BOLLA ODIERNA 80%+ {OGGI} - Quota {quota_tot:.2f} 🔥\n\n" + "\n\n".join(picks) + f"\n\n💰 TOT {quota_tot:.2f} - {len(picks)} partite"
     except Exception as e:
         return f"Errore bolla: {e}"
 
@@ -125,14 +92,14 @@ def poll_commands():
                     txt = msg.get("text","").lower().split("@")[0].strip()
                     from_chat = msg.get("chat",{}).get("id")
                     if txt.startswith("/pausa") or txt in ["pausa","stop"]:
-                        is_paused=True; tg("🛑 PAUSA V10 - 0 richieste", from_chat)
+                        is_paused=True; tg("🛑 PAUSA", from_chat)
                     elif txt.startswith("/riprendi") or txt in ["riprendi","/on","/start","on"]:
-                        is_paused=False; tg("✅ RIPRESO - Live + Tripla + Bolla 1.80 ON", from_chat)
+                        is_paused=False; tg("✅ RIPRESO", from_chat)
                     elif txt.startswith("/status"):
-                        tg(f"📊 {'PAUSA' if is_paused else 'ATTIVO'} | {datetime.now(ITALY).strftime('%H:%M')} | Tripla: {len(tripla_coda)}/3", from_chat)
-                    elif "bolla" in txt:
-                        tg("⏳ Cerco bolla odierna quota 1.80 con mercati 80%...", from_chat)
-                        tg(crea_bolla_180(), from_chat)
+                        tg(f"📊 {'PAUSA' if is_paused else 'ATTIVO'} | {datetime.now(ITALY).strftime('%H:%M')}", from_chat)
+                    elif "bolla" in txt or "bola" in txt:
+                        tg("⏳ Creo bolla odierna 1.5...", from_chat)
+                        tg(crea_bolla_15(), from_chat)
         except: pass
         time.sleep(30 if is_paused else 2)
 
@@ -149,34 +116,23 @@ def get_flag(p):
  m={"Italy":"🇮🇹","England":"🇬🇧","Spain":"🇪🇸","Germany":"🇩🇪","France":"🇫🇷","Portugal":"🇵🇹","Netherlands":"🇳🇱","Belgium":"🇧🇪","Turkey":"🇹🇷","Brazil":"🇧🇷","Argentina":"🇦🇷","USA":"🇺🇸","Australia":"🇦🇺","Japan":"🇯🇵","South Korea":"🇰🇷"}
  return m.get(p,f"[{p}]")
 
-print("BOT V10 DOPPIA+BOLLA 1.80",flush=True)
-
 while True:
  try:
-  if is_paused:
-      print("PAUSA - 0 richieste", flush=True)
-      time.sleep(60); continue
+  if is_paused: time.sleep(60); continue
   now=datetime.now(ITALY)
   if 0<=now.hour<10:
-   if now.hour==0:
-    av_s.clear();pre.clear();pre1.clear();av_g.clear();cache.clear();tripla_coda.clear()
+   if now.hour==0: av_s.clear();pre.clear();pre1.clear();av_g.clear();cache.clear();tripla_coda.clear()
    time.sleep(600); continue
-
   live=api_get("https://v3.football.api-sports.io/fixtures?live=all")
   if live=="LIMIT": time.sleep(3600); continue
   if not live: time.sleep(60); continue
-
   if time.time() - ultimo_invio_tripla >= 3600 and len(tripla_coda) >= 2:
-      txt = f"🔥🔥🔥 TRIPLA ORARIA QUOTA 3 - {now.strftime('%H:%M')} 🔥🔥🔥\n\n"
-      quota=1
+      txt = f"🔥🔥🔥 TRIPLA ORARIA {now.strftime('%H:%M')} 🔥🔥🔥\n\n"
       for p in tripla_coda[:3]:
           txt+=f"{p['flag']} {p['pref']} | {p['min']}' | Tiri:{p['sot']} | {p['home']} {p['gh']}-{p['ga']} {p['away']}\n"
-          quota*=1.45
-      txt+=f"\n💰 QUOTA TOT ~{quota:.2f} - Gioca Next Goal"
       tg(txt)
       tripla_coda = tripla_coda[3:]
       ultimo_invio_tripla = time.time()
-
   for g in live:
    fid=g["fixture"]["id"];st=g["fixture"]["status"]["short"];m=g["fixture"]["status"]["elapsed"]
    if m is None or fid in av_s: continue
@@ -189,7 +145,6 @@ while True:
       sot=get_stat(s[0]['statistics'],'Shots on Goal')+get_stat(s[1]['statistics'],'Shots on Goal');cache[fid]={'sot':sot,'time':time.time()};time.sleep(0.4);return sot
      return d.get('sot',0) if d else 0
     return d.get('sot',0)
-
    if st=="HT" and fid not in pre1:
     so=tiri()
     if so>=3: tg(f"⏸️ FINE 1T {pref} | Tiri:{so} | {home} {gh}-{ga} {away}");pre1.add(fid)
@@ -207,7 +162,6 @@ while True:
       av_s.add(fid);av_g[fid]=gh+ga
       if not any(x['fid']==fid for x in tripla_coda):
           tripla_coda.append({'fid':fid,'flag':flag,'pref':f"{paese} - {lega}",'min':m,'sot':so,'home':home,'away':away,'gh':gh,'ga':ga})
-
   for g in live:
    fid=g["fixture"]["id"]
    if fid in av_g:
