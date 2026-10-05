@@ -1,125 +1,181 @@
-import os,time,requests,threading,random
-from flask import Flask
-from datetime import datetime,timezone,timedelta
+import os, time, requests, json
+from datetime import datetime, timedelta
+import pytz
 
-BOT_TOKEN=os.getenv("BOT_TOKEN")
-CHAT_ID=os.getenv("CHAT_ID")
-API_FOOTBALL_KEY=os.getenv("API_FOOTBALL_KEY")
-ITALY=timezone(timedelta(hours=2))
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+API_KEY = os.getenv("API_FOOTBALL_KEY")
 
-is_paused=True
-last_update_id=0
-last_bolla_giorno="" # per non mandarla 2 volte
-bolla_attiva=[];bolla_attiva_info={}
+BASE_URL = "https://v3.football.api-sports.io"
+HEADERS = {"x-apisports-key": API_KEY}
+ITALY = pytz.timezone("Europe/Rome")
+FILE_BOLLA = "ultima_bolla.json"
 
-try: requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true",timeout=10)
-except: pass
-
-app=Flask(__name__)
-@app.route('/')
-def home(): return f"BOT V13 FIX 10:00",200
-def run_flask():
-    from waitress import serve; serve(app,host='0.0.0.0',port=int(os.environ.get("PORT",10000)))
-threading.Thread(target=run_flask,daemon=True).start()
-
-def tg(m,chat_id=None):
+def tg(msg):
     try:
-        cid=chat_id if chat_id else CHAT_ID
-        keyboard={"keyboard":[["🟢 ACCENDI","🔴 SPEGNI"],["🎫 BOLLA"]],"resize_keyboard":True}
-        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":cid,"text":m,"parse_mode":"HTML","reply_markup":keyboard},timeout=25)
+        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=15)
     except: pass
 
-def api_get(url):
+def get_fixtures(date_str):
+    url = f"{BASE_URL}/fixtures?date={date_str}"
+    r = requests.get(url, headers=HEADERS, timeout=20).json()
+    return r.get("response", [])
+
+def get_odd(fixture_id):
+    url = f"{BASE_URL}/odds?fixture={fixture_id}"
     try:
-        r=requests.get(url,headers={"x-apisports-key":API_FOOTBALL_KEY},timeout=30)
-        if r.status_code==429: return "LIMIT"
-        return r.json().get("response",[])
-    except: return []
+        r = requests.get(url, headers=HEADERS, timeout=20).json()
+        return r.get("response", [])
+    except:
+        return []
 
-def get_flag(p):
-    m={"Italy":"🇮🇹","England":"🇬🇧","Spain":"🇪🇸","Germany":"🇩🇪","France":"🇫🇷","Netherlands":"🇳🇱"}; return m.get(p,f"[{p}]")
-
-def crea_bolla_giornaliera_150(chat_id=None):
-    # QUESTA E' LA PROGRESSIONE DA 1.50 DELLE 10 DI MATTINA
+def get_fixture_result(fixture_id):
+    url = f"{BASE_URL}/fixtures?id={fixture_id}"
     try:
-        oggi=datetime.now(ITALY).strftime("%Y-%m-%d")
-        fixtures=api_get(f"https://v3.football.api-sports.io/fixtures?date={oggi}")
-        if fixtures=="LIMIT": return
-        # prendiamo solo partite facili - case forti in casa
-        candidati=[f for f in fixtures if f["fixture"]["status"]["short"]=="NS"]
-        if not candidati: return
-        
-        # filtra per leghe principali per trovare le facili
-        leghe_top=["Premier League","Serie A","Bundesliga","La Liga","Ligue 1","Eredivisie"]
-        facili=[f for f in candidati if f["league"]["name"] in leghe_top]
-        if len(facili)<3: facili=candidati
-
-        random.shuffle(facili)
-        bolla=[]
-        quota_tot=1.0
-        for f in facili[:4]:
-            bolla.append(f)
-            quota_tot*=1.20 # simuliamo X2 / 1X facili
-
-        # aggiustiamo per arrivare a 1.50 / 1.60
-        if len(bolla)>3: bolla=bolla[:3]
-
-        txt=f"☀️ <b>BUONGIORNO DAMI - BOLLA DELLE 10:00</b>\n<b>PROGRESSIONE GIORNALIERA QUOTA ~1.50</b>\n\n"
-        for i,p in enumerate(bolla,1):
-            flag=get_flag(p["league"]["country"]); home=p["teams"]["home"]["name"]; away=p["teams"]["away"]["name"]
-            orario=p["fixture"]["date"][11:16]; lega=p["league"]["name"]
-            txt+=f"{i}. {flag} {home} - {away} -> <b>1X / X2</b> ({orario} - {lega})\n"
-        txt+=f"\n💰 Quota Tot: ~1.50 / 1.65\n🍀 Facili prese dai top campionati"
-        tg(txt,chat_id)
-    except Exception as e: print(e)
-
-def crea_bolla_su_richiesta(chat_id=None):
-    try:
-        oggi=datetime.now(ITALY).strftime("%Y-%m-%d")
-        fixtures=api_get(f"https://v3.football.api-sports.io/fixtures?date={oggi}")
-        if fixtures=="LIMIT": tg("⚠️ Limite API finito",chat_id); return
-        candidati=[f for f in fixtures if f["fixture"]["status"]["short"]=="NS"]
-        random.shuffle(candidati)
-        txt="🎫 <b>BOLLA X2</b>\n\n"
-        for i,p in enumerate(candidati[:4],1):
-            flag=get_flag(p["league"]["country"]); txt+=f"{i}. {flag} {p['teams']['home']['name']}-{p['teams']['away']['name']} -> X2\n"
-        tg(txt,chat_id)
+        r = requests.get(url, headers=HEADERS, timeout=20).json()
+        if r.get("response"):
+            return r["response"][0]
     except: pass
+    return None
 
-def poll_commands():
-    global is_paused,last_update_id
-    while True:
+def crea_bolla():
+    domani = (datetime.now(ITALY) + timedelta(days=1)).strftime("%Y-%m-%d")
+    partite = get_fixtures(domani)
+    if not partite:
+        return "⚠️ Poche partite domani, riprovo dopo"
+
+    bolla_txt = []
+    bolla_save = []
+    quota_tot = 1.0
+
+    for p in partite[:35]:
+        fid = p["fixture"]["id"]
+        home = p["teams"]["home"]["name"]
+        away = p["teams"]["away"]["name"]
+        ora_utc = p["fixture"]["date"]
+        dt = datetime.fromisoformat(ora_utc.replace("Z", "+00:00")).astimezone(ITALY)
+        orario = dt.strftime("%H:%M")
+
+        odds_data = get_odd(fid)
+        if not odds_data: continue
         try:
-            url=f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={last_update_id+1}&timeout=25"
-            r=requests.get(url,timeout=35).json()
-            if r.get("ok"):
-                for upd in r.get("result",[]):
-                    last_update_id=upd["update_id"]
-                    txt=upd.get("message",{}).get("text","").lower()
-                    from_chat=upd.get("message",{}).get("chat",{}).get("id")
-                    if "accendi" in txt: is_paused=False; tg("✅ ATTIVO - controllo live ON",from_chat)
-                    elif "spegni" in txt or "pausa" in txt: is_paused=True; tg("🛑 LIVE IN PAUSA - ma la bolla delle 10:00 arriverà lo stesso",from_chat)
-                    elif "bolla" in txt: crea_bolla_su_richiesta(from_chat)
-        except: pass
-        time.sleep(2)
-threading.Thread(target=poll_commands,daemon=True).start()
+            book = odds_data[0]["bookmakers"][0]["bets"]
+            for bet in book:
+                if bet["name"] == "Match Winner":
+                    vals = sorted(bet["values"], key=lambda x: float(x["odd"]))
+                    q = float(vals[0]["odd"])
+                    if 1.35 <= q <= 1.85:
+                        segno_val = vals[0]["value"] # Home / Draw / Away
+                        # converti per messaggio
+                        if segno_val == "Home": segno_show = f"1 ({home})"
+                        elif segno_val == "Away": segno_show = f"2 ({away})"
+                        else: segno_show = "X"
 
-# LOOP PRINCIPALE CON ORARIO
-print("BOT V13 - ATTESA ORE 10:00",flush=True)
-while True:
+                        quota_tot *= q
+                        bolla_txt.append(f"🕒 {orario} - {home} vs {away} -> {segno_show} @ {q}")
+                        bolla_save.append({"id": fid, "home": home, "away": away, "orario": orario, "segno": segno_val, "quota": q, "segno_show": segno_show})
+                        break
+        except: continue
+        if len(bolla_txt) >= 4: break
+
+    if len(bolla_txt) < 2:
+        return "⚠️ Oggi non ci sono abbastanza quote sicure"
+
+    # SALVA LA BOLLA PER VERIFICARE DOPO SE HA VINTO
+    with open(FILE_BOLLA, "w") as f:
+        json.dump({"data": domani, "partite": bolla_save, "quota_tot": quota_tot}, f)
+
+    testo = f"🎫 *BOLLA DEL GIORNO - {domani}*\n*Quota Tot: {quota_tot:.2f}*\n\n"
+    testo += "\n".join(bolla_txt)
+    testo += f"\n\n💰 *Quota Totale: {quota_tot:.2f}*"
+    testo += f"\nGioca 1.50€"
+    return testo
+
+def verifica_bolla():
     try:
-        now=datetime.now(ITALY)
-        # INVIO AUTOMATICO ORE 10:00 - ANCHE SE IN PAUSA
-        if now.hour==10 and now.minute<5:
-            oggi_str=now.strftime("%Y-%m-%d")
-            if last_bolla_giorno!=oggi_str:
-                crea_bolla_giornaliera_150()
-                last_bolla_giorno=oggi_str
-                time.sleep(60)
-        
-        if is_paused:
-            time.sleep(60)
+        with open(FILE_BOLLA, "r") as f:
+            data = json.load(f)
+    except:
+        return "Nessuna bolla salvata ancora"
+
+    partite = data.get("partite", [])
+    if not partite:
+        return "Nessuna bolla da verificare"
+
+    vinte = 0
+    risultato_txt = f"📊 *VERIFICA BOLLA DEL {data.get('data')}*\nQuota: {data.get('quota_tot'):.2f}\n\n"
+
+    for m in partite:
+        res = get_fixture_result(m["id"])
+        if not res:
+            risultato_txt += f"⏳ {m['home']} vs {m['away']} - ancora non giocata\n"
             continue
-            
-        time.sleep(300)
-    except: time.sleep(15)
+
+        status = res["fixture"]["status"]["short"]
+        if status!= "FT":
+            risultato_txt += f"⏳ {m['home']} vs {m['away']} - {status} in corso/non finita\n"
+            continue
+
+        home_win = res["teams"]["home"]["winner"]
+        away_win = res["teams"]["away"]["winner"]
+
+        if home_win == True: vincente = "Home"
+        elif away_win == True: vincente = "Away"
+        else: vincente = "Draw"
+
+        gol_home = res["goals"]["home"]
+        gol_away = res["goals"]["away"]
+
+        if vincente == m["segno"]:
+            risultato_txt += f"✅ VINTO - {m['home']} {gol_home}-{gol_away} {m['away']} (avevi {m['segno_show']})\n"
+            vinte += 1
+        else:
+            risultato_txt += f"❌ PERSO - {m['home']} {gol_home}-{gol_away} {m['away']} (avevi {m['segno_show']})\n"
+
+    if vinte == len(partite):
+        risultato_txt += f"\n🎉 *BOLLA VINTA!!!* 🎉\nHai preso {vinte}/{len(partite)} - Vinti {data.get('quota_tot')*1.5:.2f}€ con 1.50€"
+    else:
+        risultato_txt += f"\n😭 *BOLLA PERSA* - {vinte}/{len(partite)} vinte"
+
+    return risultato_txt
+
+# --- LOOP ---
+tg("✅ BOT V15 ONLINE - Con verifica VINTA/PERSA")
+
+last_check = ""
+while True:
+    now = datetime.now(ITALY)
+    ora_min = now.strftime("%H:%M")
+
+    # 10:00 BOLLA NUOVA
+    if now.hour == 10 and now.minute == 0:
+        tg(crea_bolla())
+        time.sleep(70)
+
+    # 00:30 VERIFICA SE HA VINTO IL GIORNO PRIMA (dopo che finiscono le partite)
+    if now.hour == 0 and now.minute == 30 and last_check!= now.strftime("%Y-%m-%d"):
+        last_check = now.strftime("%Y-%m-%d")
+        tg("⏳ Controllo se la bolla di ieri ha vinto...")
+        time.sleep(5)
+        tg(verifica_bolla())
+
+    # Comandi manuali Telegram
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset=-1&timeout=10"
+        r = requests.get(url, timeout=15).json()
+        if r.get("result"):
+            last = r["result"][-1]
+            text = last.get("message", {}).get("text", "").lower()
+            upd_id = last["update_id"]
+
+            if "bolla" in text:
+                tg("⏳ Creo la bolla...")
+                tg(crea_bolla())
+                requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={upd_id+1}", timeout=10)
+            elif "verifica" in text or "vinto" in text or "perso" in text or "risultato" in text:
+                tg("⏳ Verifico il risultato...")
+                tg(verifica_bolla())
+                requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={upd_id+1}", timeout=10)
+    except: pass
+
+    time.sleep(30)
