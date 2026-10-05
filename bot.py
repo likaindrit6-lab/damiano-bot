@@ -20,7 +20,7 @@ except: pass
 app=Flask(__name__)
 @app.route('/')
 def home():
-    return f"BOT V9+BOLLA 1.5 ODIERNA - {'PAUSA' if is_paused else 'ATTIVO'}", 200
+    return f"BOT V9+BOLLA 3.30 IT - {'PAUSA' if is_paused else 'ATTIVO'}", 200
 
 def run_flask():
     from waitress import serve
@@ -48,8 +48,8 @@ def crea_bolla_15():
         picks=[]; quota_tot=1.0
         fixtures = sorted(fixtures, key=lambda x: x["fixture"]["timestamp"])
         for p in fixtures:
-            if len(picks)>=5: break
-            if quota_tot>=1.62: break
+            if len(picks)>=12: break
+            if quota_tot>=3.35: break
             fid=p["fixture"]["id"]
             dt=datetime.fromtimestamp(p["fixture"]["timestamp"], tz=ITALY)
             if dt < datetime.now(ITALY): continue
@@ -65,17 +65,33 @@ def crea_bolla_15():
                     for v in bet["values"]:
                         try:
                             q=float(v["odd"])
-                            if 1.08 <= q <= 1.28: # 80% in su
+                            if 1.08 <= q <= 1.30:
                                 if best is None or q > best["q"]:
                                     best={"m":bet["name"],"e":v["value"],"q":q}
                         except: continue
                 if not best: continue
-                if quota_tot*best["q"]>1.65: continue
+                if quota_tot*best["q"]>3.45: continue
+
+                m_name=best["m"]; m_val=best["e"]
+                if "Match Winner" in m_name:
+                    if "Home" in m_val: txt="VINCENTE FINALE: 1"
+                    elif "Away" in m_val: txt="VINCENTE FINALE: 2"
+                    else: txt="VINCENTE FINALE: X"
+                elif "Double Chance" in m_name:
+                    v=m_val.replace("Home/Draw","1X").replace("Draw/Away","X2").replace("Home/Away","12")
+                    txt=f"DOPPIA CHANCE: {v}"
+                elif "Both Teams Score" in m_name:
+                    txt="GOL: SI" if "Yes" in m_val else "GOL: NO"
+                elif "Over/Under" in m_name:
+                    txt=f"{m_val.replace('Over','Over').replace('Under','Under')} GOL"
+                else:
+                    txt=f"{m_name}: {m_val}".replace("Home","1").replace("Away","2").replace("Yes","Si").replace("No","No").replace("Draw","X")
+
                 quota_tot*=best["q"]
-                picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {best['m']}: {best['e']} @ {best['q']}")
+                picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {txt} @ {best['q']}")
             except: continue
-        if len(picks)<4: return f"Oggi {OGGI} poche partite da 80%, riprova tra 1h. Trovate {len(picks)}."
-        return f"🔥 BOLLA ODIERNA 80%+ {OGGI} - Quota {quota_tot:.2f} 🔥\n\n" + "\n\n".join(picks) + f"\n\n💰 TOT {quota_tot:.2f} - {len(picks)} partite"
+        if len(picks)<6: return f"Oggi poche partite da 80%, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f}"
+        return f"🔥 BOLLA ODIERNA 80%+ {OGGI} - Quota {quota_tot:.2f} 🔥\n\n" + "\n\n".join(picks) + f"\n\n💰 TOT {quota_tot:.2f} - {len(picks)} partite - OBIETTIVO 3.20/3.30"
     except Exception as e:
         return f"Errore bolla: {e}"
 
@@ -98,7 +114,7 @@ def poll_commands():
                     elif txt.startswith("/status"):
                         tg(f"📊 {'PAUSA' if is_paused else 'ATTIVO'} | {datetime.now(ITALY).strftime('%H:%M')}", from_chat)
                     elif "bolla" in txt or "bola" in txt:
-                        tg("⏳ Creo bolla odierna 1.5...", from_chat)
+                        tg("⏳ Creo bolla odierna 3.20/3.30...", from_chat)
                         tg(crea_bolla_15(), from_chat)
         except: pass
         time.sleep(30 if is_paused else 2)
