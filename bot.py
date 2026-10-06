@@ -69,6 +69,33 @@ def crea_bolla_15():
    fid=p["fixture"]["id"];dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
    if dt < datetime.now(ITALY): continue
    home=p['teams']['home']['name'];away=p['teams']['away']['name'];paese=p['league']['country'];orario=dt.strftime("%H:%M")
-   # FIX ITALIA -.it non.com - non apre più errore DNS
    qenc=urllib.parse.quote(home+" "+away)
    link_web="https://www.bet365.it/#/AX/K^"+qenc
+   link_google="https://www.google.com/search?q=site:bet365.it+"+qenc
+   link_stats="https://www.flashscore.it/search/?q="+qenc
+   u2="https://v3.football.api-sports.io/odds?fixture="+str(fid)
+   odds=api_get(u2)
+   if not odds or odds=="LIMIT": continue
+   if not odds[0].get("bookmakers"): continue
+   book=None
+   for b in odds[0]["bookmakers"]:
+    if b["id"]==8 or "365" in b["name"]:
+     book=b;break
+   if not book: book=odds[0]["bookmakers"][0]
+   best=None
+   for bet in book["bets"]:
+    if bet["name"] not in ["Match Winner","Double Chance","Both Teams To Score","Goals Over/Under"]: continue
+    for v in bet["values"]:
+     try:
+      q=float(v["odd"])
+      if 1.08 <= q <= 1.30:
+       if best is None or q>best["q"]:
+        best={"m":bet["name"],"e":v["value"],"q":q}
+     except: continue
+   if not best: continue
+   if quota_tot*best["q"]>3.45: continue
+   m_name=best["m"];m_val=best["e"]
+   if "Match Winner" in m_name: txt="VINCENTE: 1" if "Home" in m_val else "VINCENTE: 2" if "Away" in m_val else "VINCENTE: X"
+   elif "Double Chance" in m_name:
+    v=m_val.replace("Home/Draw","1X").replace("Draw/Away","X2").replace("Home/Away","12");txt="DOPPIA: "+v
+   elif "Both Teams Score
