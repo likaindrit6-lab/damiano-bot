@@ -27,7 +27,7 @@ app=Flask(__name__)
 @app.route('/')
 def home():
     s="PAUSA" if is_paused else "ATTIVO"
-    return f"BOT V16 FIX - {s}",200
+    return f"BOT V18 FIX GOOGLE - {s}",200
 
 def run_flask():
     from waitress import serve
@@ -84,10 +84,10 @@ def crea_bolla_15():
             lega=p['league']['name']
             orario=dt.strftime("%H:%M")
             qenc=urllib.parse.quote_plus(home+" "+away)
-            qenc_g=urllib.parse.quote_plus("bet365 "+home+" "+away)
-            link_web=f"https://www.bet365.it/search?q={qenc}"
-            link_google=f"https://www.google.com/search?q={qenc_g}"
+            qenc_bet=urllib.parse.quote_plus(home+" "+away+" site:bet365.it")
+            link_bet365=f"https://www.google.com/search?q={qenc_bet}&btnI=1"
             link_stats=f"https://www.flashscore.it/search/?q={qenc}"
+            link_google=f"https://www.google.com/search?q={qenc}+pronostico&udm=14"
             odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
             if not odds or odds=="LIMIT": continue
             if not odds[0].get("bookmakers"): continue
@@ -122,7 +122,7 @@ def crea_bolla_15():
                 else:
                     txt=f"{m_name}: {m_val}"
                 quota_tot*=best["q"]
-                picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {txt} @ {best['q']}\n<a href='{link_web}'>WEB</a> | <a href='{link_google}'>GOOGLE</a> | <a href='{link_stats}'>STATS</a>")
+                picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {txt} @ {best['q']}\n<a href='{link_bet365}'>BET365</a> | <a href='{link_stats}'>STATS</a> | <a href='{link_google}'>GOOGLE</a>")
             except: continue
         if len(picks)<5:
             return f"Oggi poche partite da 80%, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f}"
