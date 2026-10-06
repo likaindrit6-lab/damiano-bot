@@ -13,7 +13,7 @@ app=Flask(__name__)
 @app.route('/')
 def home():
  stato="PAUSA" if is_paused else "ATTIVO"
- return f"BOT V13.9 BYPASS - {stato}",200
+ return f"BOT V14.2 BYPASS APP - {stato}",200
 def run_flask():
  from waitress import serve
  serve(app,host='0.0.0.0',port=int(os.environ.get("PORT",10000)))
@@ -48,14 +48,9 @@ def get_tiri(fid):
    u="https://v3.football.api-sports.io/fixtures/statistics?fixture="+str(fid)
    s=api_get(u)
    if s and len(s)>=2:
-    sa=s[0].get('statistics',[])
-    sb=s[1].get('statistics',[])
-    v1=get_stat(sa,'Shots on Goal')
-    v2=get_stat(sb,'Shots on Goal')
-    sot=v1+v2
-    cache[fid]={'sot':sot,'time':now_t}
-    time.sleep(0.4)
-    return sot
+    sa=s[0].get('statistics',[]);sb=s[1].get('statistics',[])
+    v1=get_stat(sa,'Shots on Goal');v2=get_stat(sb,'Shots on Goal')
+    sot=v1+v2;cache[fid]={'sot':sot,'time':now_t};time.sleep(0.4);return sot
    if d: return d.get('sot',0)
    return 0
   return d.get('sot',0)
@@ -71,20 +66,14 @@ def crea_bolla_15():
   for p in fixtures:
    if len(picks)>=12: break
    if quota_tot>=3.35: break
-   fid=p["fixture"]["id"]
-   dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
+   fid=p["fixture"]["id"];dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
    if dt < datetime.now(ITALY): continue
-   home=p['teams']['home']['name']
-   away=p['teams']['away']['name']
-   paese=p['league']['country']
-   orario=dt.strftime("%H:%M")
-   # BYPASS APP - 3 link che non aprono l'app
-   q1=urllib.parse.quote(home+" "+away)
-   q2=urllib.parse.quote(home+" vs "+away+" bet365")
-   q3=urllib.parse.quote(home+" "+away)
-   link_web="https://www.bet365.com/#/AX/K^"+q1
-   link_google="https://www.google.com/search?q="+q2
-   link_stats="https://www.flashscore.it/search/?q="+q3
+   home=p['teams']['home']['name'];away=p['teams']['away']['name'];paese=p['league']['country'];orario=dt.strftime("%H:%M")
+   # BYPASS APP - m.bet365.com non apre l'app
+   qenc=urllib.parse.quote(home+" "+away)
+   link_web="https://m.bet365.com/#/AX/K^"+qenc
+   link_google="https://www.google.com/search?q=site:bet365.com+"+qenc
+   link_stats="https://www.flashscore.it/search/?q="+qenc
    u2="https://v3.football.api-sports.io/odds?fixture="+str(fid)
    odds=api_get(u2)
    if not odds or odds=="LIMIT": continue
@@ -131,7 +120,7 @@ def poll_commands():
      elif "accendi" in txt or "/start" in txt: is_paused=False;tg("RIPRESO",from_chat,True)
      elif "status" in txt:
       stato="PAUSA" if is_paused else "ATTIVO";ora=datetime.now(ITALY).strftime('%H:%M')
-      tg(f"STATUS {stato} {ora} V13.9 BYPASS",from_chat,True)
+      tg(f"STATUS {stato} {ora} V14.2",from_chat,True)
      elif "bolla" in txt: tg("Creo bolla...",from_chat);tg(crea_bolla_15(),from_chat,True)
   except: pass
   time.sleep(30 if is_paused else 2)
