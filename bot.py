@@ -1,4 +1,4 @@
-import os,time,requests,threading,json
+import os,time,requests,threading,json,urllib.parse
 from flask import Flask
 from datetime import datetime,timezone,timedelta
 
@@ -20,7 +20,7 @@ except: pass
 app=Flask(__name__)
 @app.route('/')
 def home():
-    return f"BOT V12-BET365 PURO - {'PAUSA' if is_paused else 'ATTIVO'}", 200
+    return f"BOT V13-BET365 LINK - {'PAUSA' if is_paused else 'ATTIVO'}", 200
 
 def run_flask():
     from waitress import serve
@@ -36,7 +36,7 @@ TASTIERA_JSON = json.dumps({
 def tg(m, chat_id=None, con_tastiera=False):
  try:
   cid = chat_id if chat_id else CHAT_ID
-  payload={"chat_id":cid,"text":m,"parse_mode":"HTML"}
+  payload={"chat_id":cid,"text":m,"parse_mode":"HTML", "disable_web_page_preview": True}
   if con_tastiera:
       payload["reply_markup"]=TASTIERA_JSON
   requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json=payload,timeout=25)
@@ -65,10 +65,14 @@ def crea_bolla_15():
             home=p['teams']['home']['name']; away=p['teams']['away']['name']
             paese=p['league']['country']; lega=p['league']['name']
             orario=dt.strftime("%H:%M")
+
+            # LINK DIRETTO BET365 - ti apre la ricerca della partita
+            query = urllib.parse.quote(f"{home} {away}")
+            link_bet365 = f"https://www.bet365.it/#/AX/K^{query}"
+
             odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
             if not odds or odds=="LIMIT" or not odds[0].get("bookmakers"): continue
 
-            # CERCA BET365
             book=None
             for b in odds[0]["bookmakers"]:
                 if b["id"]==8 or "365" in b["name"]:
@@ -78,7 +82,6 @@ def crea_bolla_15():
             try:
                 best=None
                 for bet in book["bets"]:
-                    # WHITELIST BET365 - SOLO QUESTI
                     if bet["name"] not in ["Match Winner", "Double Chance", "Both Teams To Score", "Goals Over/Under"]:
                         continue
                     for v in bet["values"]:
@@ -103,7 +106,8 @@ def crea_bolla_15():
                 else:
                     txt=f"{m_val} GOL"
                 quota_tot*=best["q"]
-                picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {txt} @ {best['q']}")
+                # AGGIUNTO LINK CLICCABILE
+                picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {txt} @ {best['q']}\n🔗 <a href='{link_bet365}'>Apri su BET365</a>")
             except: continue
 
         if len(picks) < 5:
@@ -134,7 +138,7 @@ def poll_commands():
                     elif "status" in txt:
                         tg(f"📊 {'PAUSA' if is_paused else 'ATTIVO'} | {datetime.now(ITALY).strftime('%H:%M')}", from_chat, con_tastiera=True)
                     elif "bolla" in txt or "bola" in txt:
-                        tg("⏳ Creo bolla BET365 3.20/3.30...", from_chat)
+                        tg("⏳ Creo bolla BET365 con link diretti...", from_chat)
                         tg(crea_bolla_15(), from_chat, con_tastiera=True)
         except: pass
         time.sleep(30 if is_paused else 2)
@@ -169,41 +173,3 @@ while True:
       tg(txt)
       tripla_coda = tripla_coda[3:]
       ultimo_invio_tripla = time.time()
-  for g in live:
-   fid=g["fixture"]["id"];st=g["fixture"]["status"]["short"];m=g["fixture"]["status"]["elapsed"]
-   if m is None or fid in av_s: continue
-   home=g['teams']['home']['name'];away=g['teams']['away']['name'];gh=g['goals']['home'];ga=g['goals']['away'];paese=g['league']['country'];lega=g['league']['name'];flag=get_flag(paese);pref=f"{flag} {paese.upper()} - {lega}"
-   def tiri():
-    d=cache.get(fid)
-    if not d or time.time()-d.get('time',0)>180:
-     s=api_get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
-     if s and len(s)>=2:
-      sot=get_stat(s[0]['statistics'],'Shots on Goal')+get_stat(s[1]['statistics'],'Shots on Goal');cache[fid]={'sot':sot,'time':time.time()};time.sleep(0.4);return sot
-     return d.get('sot',0) if d else 0
-    return d.get('sot',0)
-   if st=="HT" and fid not in pre1:
-    so=tiri()
-    if so>=3: tg(f"⏸️ FINE 1T {pref} | Tiri:{so} | {home} {gh}-{ga} {away}");pre1.add(fid)
-   if 46<=(m or 0)<=69 and fid not in pre:
-    so=tiri()
-    if so>=5:
-     tg(f"🔔 PREPARATI {m}' {pref} | Tiri:{so} | {home} {gh}-{ga} {away} | NEXT")
-     pre.add(fid)
-   if 65<=(m or 0)<=92:
-    so=tiri()
-    if so>=4:
-     if fid not in av_s:
-      sq=home if gh<=ga else away
-      tg(f"🔥 GIOCALO {m}' >85% {pref} | Tiri:{so} | {home} {gh}-{ga} {away} | NEXT {sq}")
-      av_s.add(fid);av_g[fid]=gh+ga
-      if not any(x['fid']==fid for x in tripla_coda):
-          tripla_coda.append({'fid':fid,'flag':flag,'pref':f"{paese} - {lega}",'min':m,'sot':so,'home':home,'away':away,'gh':gh,'ga':ga})
-  for g in live:
-   fid=g["fixture"]["id"]
-   if fid in av_g:
-    tot=g["goals"]["home"]+g["goals"]["away"]
-    if tot>av_g[fid]:
-     flag=get_flag(g['league']['country']);tg(f"🟢 GOAL VINTO! {flag} {g['league']['country'].upper()} - {g['league']['name']} | {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}");del av_g[fid]
-  time.sleep(60)
- except:
-  time.sleep(15)
