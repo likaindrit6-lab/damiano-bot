@@ -20,7 +20,7 @@ except: pass
 app=Flask(__name__)
 @app.route('/')
 def home():
-    return f"BOT V9+BOLLA 3.30 IT - {'PAUSA' if is_paused else 'ATTIVO'}", 200
+    return f"BOT V12-BET365 PURO - {'PAUSA' if is_paused else 'ATTIVO'}", 200
 
 def run_flask():
     from waitress import serve
@@ -67,10 +67,20 @@ def crea_bolla_15():
             orario=dt.strftime("%H:%M")
             odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
             if not odds or odds=="LIMIT" or not odds[0].get("bookmakers"): continue
+
+            # CERCA BET365
+            book=None
+            for b in odds[0]["bookmakers"]:
+                if b["id"]==8 or "365" in b["name"]:
+                    book=b; break
+            if not book: book=odds[0]["bookmakers"][0]
+
             try:
                 best=None
-                for bet in odds[0]["bookmakers"][0]["bets"]:
-                    if "First Half" in bet["name"] or "Corners" in bet["name"] or "Cards" in bet["name"]: continue
+                for bet in book["bets"]:
+                    # WHITELIST BET365 - SOLO QUESTI
+                    if bet["name"] not in ["Match Winner", "Double Chance", "Both Teams To Score", "Goals Over/Under"]:
+                        continue
                     for v in bet["values"]:
                         try:
                             q=float(v["odd"])
@@ -90,21 +100,18 @@ def crea_bolla_15():
                     txt=f"DOPPIA CHANCE: {v}"
                 elif "Both Teams Score" in m_name:
                     txt="GOL: SI" if "Yes" in m_val else "GOL: NO"
-                elif "Over/Under" in m_name:
-                    txt=f"{m_val.replace('Over','Over').replace('Under','Under')} GOL"
                 else:
-                    txt=f"{m_name}: {m_val}".replace("Home","1").replace("Away","2").replace("Yes","Si").replace("No","No").replace("Draw","X")
+                    txt=f"{m_val} GOL"
                 quota_tot*=best["q"]
                 picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {txt} @ {best['q']}")
             except: continue
 
-        # FIX CHE MI HAI CHIESTO: manda anche con 5 se quota >=3.00
         if len(picks) < 5:
-            return f"Oggi poche partite da 80%, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f}"
+            return f"Oggi poche partite BET365, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f}"
         if len(picks) == 5 and quota_tot < 3.00:
-            return f"Oggi poche partite da 80%, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f} - aspetto 3.00"
+            return f"Oggi poche partite BET365, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f} - aspetto 3.00"
 
-        return f"🔥 BOLLA ODIERNA 80%+ {OGGI} - Quota {quota_tot:.2f} 🔥\n\n" + "\n\n".join(picks) + f"\n\n💰 TOT {quota_tot:.2f} - {len(picks)} partite - OBIETTIVO 3.20/3.30"
+        return f"🔥 BOLLA BET365 80%+ {OGGI} - Quota {quota_tot:.2f} 🔥\n\n" + "\n\n".join(picks) + f"\n\n💰 TOT {quota_tot:.2f} - {len(picks)} partite - OBIETTIVO 3.20/3.30"
     except Exception as e:
         return f"Errore bolla: {e}"
 
@@ -127,7 +134,7 @@ def poll_commands():
                     elif "status" in txt:
                         tg(f"📊 {'PAUSA' if is_paused else 'ATTIVO'} | {datetime.now(ITALY).strftime('%H:%M')}", from_chat, con_tastiera=True)
                     elif "bolla" in txt or "bola" in txt:
-                        tg("⏳ Creo bolla odierna 3.20/3.30...", from_chat)
+                        tg("⏳ Creo bolla BET365 3.20/3.30...", from_chat)
                         tg(crea_bolla_15(), from_chat, con_tastiera=True)
         except: pass
         time.sleep(30 if is_paused else 2)
