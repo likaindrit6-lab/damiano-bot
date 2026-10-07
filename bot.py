@@ -20,7 +20,7 @@ app=Flask(__name__)
 @app.route('/')
 def home():
     s="PAUSA" if is_paused else "ATTIVO"
-    return f"BOT V27 UNDER 24H DAMI - {s}",200
+    return f"BOT V27 UNDER 4.5 DAMI - {s}",200
 
 def run_flask():
     from waitress import serve
@@ -29,7 +29,7 @@ def run_flask():
 threading.Thread(target=run_flask,daemon=True).start()
 
 TASTIERA_JSON=json.dumps({
-    "keyboard":[["🟢 ACCENDI","🔴 SPEGNI"],["🎫 BOLLA","📊 STATUS"],["⚽ UNDER 3.5"]],
+    "keyboard":[["🟢 ACCENDI","🔴 SPEGNI"],["🎫 BOLLA","📊 STATUS"],["⚽ UNDER 4.5"]],
     "resize_keyboard":True,"is_persistent":True
 })
 
@@ -76,7 +76,7 @@ def traduci(market, sel):
     if "OVER/UNDER" in mk or "TOTAL" in mk: return f"UNDER/OVER: {sel}"
     return f"ESITO FINALE: {s}"
 
-# --- NUOVO: LISTA UNDER 3.5 > 1.35 - 24H ---
+# --- MODIFICATO: UNDER 4.5 > 1.20 ---
 def lista_under_35():
     try:
         OGGI=datetime.now(ITALY).strftime("%Y-%m-%d")
@@ -104,16 +104,16 @@ def lista_under_35():
                 for bet in book_to_use["bets"]:
                     if "OVER/UNDER" not in bet["name"].upper() and "TOTAL" not in bet["name"].upper(): continue
                     for v in bet["values"]:
-                        if "under 3.5" in v["value"].lower():
+                        if "under 4.5" in v["value"].lower():
                             try:
                                 q=float(v["odd"])
-                                if q > 1.35:
-                                    risultati.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 UNDER 3.5 @ {q}\n<a href='{link_bet365}'>BET365</a>")
+                                if q > 1.20 and q < 1.55:
+                                    risultati.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 UNDER 4.5 @ {q}\n<a href='{link_bet365}'>BET365</a>")
                             except: pass
             except: continue
             time.sleep(0.2)
-        if not risultati: return f"Nessuna Under 3.5 > 1.35 oggi {OGGI}"
-        return f"⚽ UNDER 3.5 > 1.35 - {OGGI} 24H ({len(risultati)} partite)\n\n" + "\n\n".join(risultati)
+        if not risultati: return f"Nessuna Under 4.5 > 1.20 oggi {OGGI}"
+        return f"⚽ UNDER 4.5 > 1.20 - {OGGI} 24H ({len(risultati)} partite)\n\n" + "\n\n".join(risultati)
     except Exception as e: return f"Errore under: {e}"
 
 def crea_bolla_15():
@@ -182,7 +182,7 @@ def poll_commands():
                         ora=datetime.now(ITALY).strftime('%H:%M'); st="PAUSA" if is_paused else "ATTIVO"
                         tg(f"📊 {st} | {ora}",from_chat,con_tastiera=True)
                     elif "under" in txt:
-                        tg("⏳ Cerco Under 3.5 > 1.35 - 24H...",from_chat)
+                        tg("⏳ Cerco Under 4.5 > 1.20 - 24H...",from_chat)
                         tg(lista_under_35(),from_chat,con_tastiera=True)
                     elif "bolla" in txt or "bola" in txt:
                         tg("⏳ Creo bolla solo prime squadre Bet365...",from_chat)
