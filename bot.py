@@ -9,13 +9,7 @@ ITALY=timezone(timedelta(hours=2))
 
 is_paused=False
 last_update_id=0
-av_g={}
-av_s=set()
-pre=set()
-pre1=set()
-cache={}
-tripla_coda=[]
-ultimo_invio_tripla=time.time()
+av_g={}; av_s=set(); pre=set(); pre1=set(); cache={}; tripla_coda=[]; ultimo_invio_tripla=time.time()
 
 try:
     base=f"https://api.telegram.org/bot{BOT_TOKEN}"
@@ -26,7 +20,7 @@ app=Flask(__name__)
 @app.route('/')
 def home():
     s="PAUSA" if is_paused else "ATTIVO"
-    return f"BOT V24 BET365 DAMI - {s}",200
+    return f"BOT V27 UNDER 24H DAMI - {s}",200
 
 def run_flask():
     from waitress import serve
@@ -35,7 +29,7 @@ def run_flask():
 threading.Thread(target=run_flask,daemon=True).start()
 
 TASTIERA_JSON=json.dumps({
-    "keyboard":[["🟢 ACCENDI","🔴 SPEGNI"],["🎫 BOLLA","📊 STATUS"]],
+    "keyboard":[["🟢 ACCENDI","🔴 SPEGNI"],["🎫 BOLLA","📊 STATUS"],["⚽ UNDER 3.5"]],
     "resize_keyboard":True,"is_persistent":True
 })
 
@@ -57,8 +51,7 @@ def api_get(url):
     except: return []
 
 YOUTH_BLACKLIST=["U21","U20","U23","U19","U18","U17","YOUTH","PRIMAVERA","REVELACAO","RESERVA","RESERVE","WOMEN","FEMMINILE"]
-def is_youth(lega):
-    return any(b in lega.upper() for b in YOUTH_BLACKLIST)
+def is_youth(lega): return any(b in lega.upper() for b in YOUTH_BLACKLIST)
 
 def is_allowed_market(name):
     m=name.upper()
@@ -82,6 +75,46 @@ def traduci(market, sel):
     if "HT/FT" in mk: return f"PARZIALE/FINALE: {s}"
     if "OVER/UNDER" in mk or "TOTAL" in mk: return f"UNDER/OVER: {sel}"
     return f"ESITO FINALE: {s}"
+
+# --- NUOVO: LISTA UNDER 3.5 > 1.35 - 24H ---
+def lista_under_35():
+    try:
+        OGGI=datetime.now(ITALY).strftime("%Y-%m-%d")
+        fixtures=api_get(f"https://v3.football.api-sports.io/fixtures?date={OGGI}")
+        if not fixtures: return f"Nessuna partita oggi {OGGI}"
+        risultati=[]
+        fixtures=sorted(fixtures,key=lambda x:x["fixture"]["timestamp"])
+        for p in fixtures:
+            fid=p["fixture"]["id"]
+            dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
+            if dt < datetime.now(ITALY): continue
+            if is_youth(p['league']['name']): continue
+            home=p['teams']['home']['name']; away=p['teams']['away']['name']
+            paese=p['league']['country']; lega=p['league']['name']; orario=dt.strftime("%H:%M")
+            qenc=urllib.parse.quote_plus(home+" "+away)
+            link_bet365=f"https://www.bet365.it/search?q={qenc}"
+            odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
+            if not odds or odds=="LIMIT": continue
+            if not odds[0].get("bookmakers"): continue
+            bk365=None
+            for bk in odds[0]["bookmakers"]:
+                if bk.get("id")==8: bk365=bk; break
+            book_to_use=bk365 if bk365 else odds[0]["bookmakers"][0]
+            try:
+                for bet in book_to_use["bets"]:
+                    if "OVER/UNDER" not in bet["name"].upper() and "TOTAL" not in bet["name"].upper(): continue
+                    for v in bet["values"]:
+                        if "under 3.5" in v["value"].lower():
+                            try:
+                                q=float(v["odd"])
+                                if q > 1.35:
+                                    risultati.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 UNDER 3.5 @ {q}\n<a href='{link_bet365}'>BET365</a>")
+                            except: pass
+            except: continue
+            time.sleep(0.2)
+        if not risultati: return f"Nessuna Under 3.5 > 1.35 oggi {OGGI}"
+        return f"⚽ UNDER 3.5 > 1.35 - {OGGI} 24H ({len(risultati)} partite)\n\n" + "\n\n".join(risultati)
+    except Exception as e: return f"Errore under: {e}"
 
 def crea_bolla_15():
     try:
@@ -148,6 +181,9 @@ def poll_commands():
                     elif "status" in txt:
                         ora=datetime.now(ITALY).strftime('%H:%M'); st="PAUSA" if is_paused else "ATTIVO"
                         tg(f"📊 {st} | {ora}",from_chat,con_tastiera=True)
+                    elif "under" in txt:
+                        tg("⏳ Cerco Under 3.5 > 1.35 - 24H...",from_chat)
+                        tg(lista_under_35(),from_chat,con_tastiera=True)
                     elif "bolla" in txt or "bola" in txt:
                         tg("⏳ Creo bolla solo prime squadre Bet365...",from_chat)
                         tg(crea_bolla_15(),from_chat,con_tastiera=True)
