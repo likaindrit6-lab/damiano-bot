@@ -20,7 +20,7 @@ app=Flask(__name__)
 @app.route('/')
 def home():
     s="PAUSA" if is_paused else "ATTIVO"
-    return f"BOT V34 UNDER 4.5 STABILE - {s}",200
+    return f"BOT V35 STABILE - {s}",200
 
 def run_flask():
     try:
@@ -32,7 +32,7 @@ def run_flask():
 threading.Thread(target=run_flask,daemon=True).start()
 
 TASTIERA_JSON=json.dumps({
-    "keyboard":[["🟢 ACCENDI","🔴 SPEGNI"],["🎫 BOLLA","📊 STATUS"],["⚽ UNDER 4.5"]],
+    "keyboard":[["ACCENDI","SPEGNI"],["BOLLA","STATUS"],["UNDER 4.5"]],
     "resize_keyboard":True,"is_persistent":True
 })
 
@@ -67,7 +67,7 @@ def lista_under_35():
         fixtures = []
         if fixtures_oggi and fixtures_oggi!= "LIMIT": fixtures += fixtures_oggi
         if fixtures_domani and fixtures_domani!= "LIMIT" and DOMANI!= OGGI: fixtures += fixtures_domani
-        if not fixtures: return f"Nessuna partita nelle prossime 24H"
+        if not fixtures: return "Nessuna partita nelle prossime 24H"
         risultati=[]
         fixtures=sorted(fixtures,key=lambda x:x["fixture"]["timestamp"])
         for p in fixtures:
@@ -93,15 +93,15 @@ def lista_under_35():
                         if "under 4.5" in v["value"].lower():
                             try:
                                 q=float(v["odd"])
-                                if 1.03 <= q <= 1.20: # SOTTO 1.20 COME VUOI TU
-                                    risultati.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 UNDER 4.5 @ {q}\n<a href='{link_bet365}'>BET365</a>")
+                                if 1.03 <= q <= 1.20:
+                                    risultati.append(f"{orario} - {paese} - {lega}\n{home} vs {away}\nUNDER 4.5 @ {q} ({book['name']})\n{link_bet365}")
                                     trovato=True
                                     break
                             except: pass
                     if trovato: break
             time.sleep(0.2)
-        if not risultati: return f"Nessuna Under 4.5 sotto 1.20 nelle 24H"
-        return f"⚽ UNDER 4.5 SOTTO 1.20 - 24H ({len(risultati)})\n\n" + "\n\n".join(risultati)
+        if not risultati: return "Nessuna Under 4.5 sotto 1.20 nelle 24H"
+        return f"UNDER 4.5 SOTTO 1.20 - 24H ({len(risultati)})\n\n" + "\n\n".join(risultati)
     except Exception as e:
         return f"Errore under: {e}"
 
@@ -122,7 +122,6 @@ def crea_bolla_15():
             paese=p['league']['country']; lega=p['league']['name']; orario=dt.strftime("%H:%M")
             qenc=urllib.parse.quote_plus(home+" "+away)
             link_bet365=f"https://www.bet365.it/search?q={qenc}"
-            link_stats=f"https://www.flashscore.it/search/?q={qenc}"
             odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
             if not odds or odds=="LIMIT": continue
             if not odds[0].get("bookmakers"): continue
@@ -140,10 +139,10 @@ def crea_bolla_15():
                 if not best: continue
                 if quota_tot*best["q"]>3.60: continue
                 quota_tot*=best["q"]
-                picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {best['e']} @ {best['q']}\n<a href='{link_bet365}'>BET365</a>")
+                picks.append(f"{orario} - {paese} - {lega}\n{home} vs {away}\n{best['e']} @ {best['q']}\n{link_bet365}")
             except: continue
         if len(picks)<4: return f"Poche partite, trovate {len(picks)} quota {quota_tot:.2f}"
-        return f"🔥 BOLLA {OGGI} - {quota_tot:.2f}\n\n"+"\n\n".join(picks)
+        return f"BOLLA {OGGI} - {quota_tot:.2f}\n\n"+"\n\n".join(picks)
     except Exception as e: return f"Errore bolla: {e}"
 
 def poll_commands():
@@ -159,14 +158,51 @@ def poll_commands():
                     msg=upd.get("message",{}); txt=msg.get("text","").lower().split("@")[0].strip()
                     from_chat=msg.get("chat",{}).get("id")
                     if "spegni" in txt or "pausa" in txt:
-                        is_paused=True; tg("🛑 PAUSA",from_chat,con_tastiera=True)
+                        is_paused=True; tg("PAUSA",from_chat,con_tastiera=True)
                     elif "accendi" in txt or "/on" in txt or "/start" in txt:
-                        is_paused=False; tg("✅ RIPRESO",from_chat,con_tastiera=True)
+                        is_paused=False; tg("RIPRESO",from_chat,con_tastiera=True)
                     elif "status" in txt:
                         ora=datetime.now(ITALY).strftime('%H:%M'); st="PAUSA" if is_paused else "ATTIVO"
-                        tg(f"📊 {st} | {ora}",from_chat,con_tastiera=True)
+                        tg(f"{st} | {ora}",from_chat,con_tastiera=True)
                     elif "under" in txt:
-                        tg("⏳ Cerco Under 4.5 sotto 1.20 - 24H...",from_chat)
+                        tg("Cerco Under 4.5 sotto 1.20 - 24H...",from_chat)
                         tg(lista_under_35(),from_chat,con_tastiera=True)
                     elif "bolla" in txt or "bola" in txt:
-                        tg("⏳ Creo bolla...",
+                        tg("Creo bolla...",from_chat)
+                        tg(crea_bolla_15(),from_chat,con_tastiera=True)
+        except: pass
+        time.sleep(3)
+threading.Thread(target=poll_commands,daemon=True).start()
+
+def get_stat(a,n):
+    for s in a:
+        if s.get('type')==n:
+            try: return int(str(s.get('value') or 0).replace('%','').strip() or 0)
+            except: return 0
+    return 0
+
+while True:
+    try:
+        if is_paused: time.sleep(60); continue
+        now=datetime.now(ITALY)
+        if now.hour==0 and now.minute<5:
+            av_s.clear();pre.clear();pre1.clear();av_g.clear();cache.clear()
+        live=api_get("https://v3.football.api-sports.io/fixtures?live=all")
+        if live=="LIMIT": time.sleep(3600); continue
+        if not live: time.sleep(60); continue
+        for g in live:
+            fid=g["fixture"]["id"]; m=g["fixture"]["status"]["elapsed"]
+            if m is None or fid in av_s: continue
+            if is_youth(g['league']['name']): continue
+            if 65<=(m or 0)<=90:
+                s=api_get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
+                sot=0
+                if s and len(s)>=2:
+                    sot=get_stat(s[0]['statistics'],'Shots on Goal')+get_stat(s[1]['statistics'],'Shots on Goal')
+                if sot>=4 and fid not in av_s:
+                    home=g['teams']['home']['name']; away=g['teams']['away']['name']
+                    tg(f"GIOCALO {m}' {g['league']['name']} | {home} vs {away}")
+                    av_s.add(fid); av_g[fid]=g['goals']['home']+g['goals']['away']
+        time.sleep(60)
+    except:
+        time.sleep(15)
