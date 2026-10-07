@@ -20,7 +20,7 @@ app=Flask(__name__)
 @app.route('/')
 def home():
     s="PAUSA" if is_paused else "ATTIVO"
-    return f"BOT V27 UNDER 4.5 DAMI - {s}",200
+    return f"BOT V28 UNDER 4.5 1.10-1.20 DAMI - {s}",200
 
 def run_flask():
     from waitress import serve
@@ -76,30 +76,34 @@ def traduci(market, sel):
     if "OVER/UNDER" in mk or "TOTAL" in mk: return f"UNDER/OVER: {sel}"
     return f"ESITO FINALE: {s}"
 
-# --- MODIFICATO: UNDER 4.5 > 1.20 ---
 def lista_under_35():
     try:
-        OGGI=datetime.now(ITALY).strftime("%Y-%m-%d")
-        fixtures=api_get(f"https://v3.football.api-sports.io/fixtures?date={OGGI}")
-        if not fixtures: return f"Nessuna partita oggi {OGGI}"
+        now = datetime.now(ITALY)
+        fine_24h = now + timedelta(hours=24)
+        OGGI = now.strftime("%Y-%m-%d")
+        DOMANI = fine_24h.strftime("%Y-%m-%d")
+        fixtures_oggi = api_get(f"https://v3.football.api-sports.io/fixtures?date={OGGI}")
+        fixtures_domani = api_get(f"https://v3.football.api-sports.io/fixtures?date={DOMANI}")
+        fixtures = []
+        if fixtures_oggi and fixtures_oggi!= "LIMIT": fixtures += fixtures_oggi
+        if fixtures_domani and fixtures_domani!= "LIMIT" and DOMANI!= OGGI: fixtures += fixtures_domani
+        if not fixtures: return f"Nessuna partita nelle prossime 24H"
         risultati=[]
         fixtures=sorted(fixtures,key=lambda x:x["fixture"]["timestamp"])
         for p in fixtures:
             fid=p["fixture"]["id"]
             dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
-            if dt < datetime.now(ITALY): continue
+            if dt < now: continue
+            if dt > fine_24h: continue
             if is_youth(p['league']['name']): continue
             home=p['teams']['home']['name']; away=p['teams']['away']['name']
-            paese=p['league']['country']; lega=p['league']['name']; orario=dt.strftime("%H:%M")
+            paese=p['league']['country']; lega=p['league']['name']; orario=dt.strftime("%d/%m %H:%M")
             qenc=urllib.parse.quote_plus(home+" "+away)
             link_bet365=f"https://www.bet365.it/search?q={qenc}"
             odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
             if not odds or odds=="LIMIT": continue
             if not odds[0].get("bookmakers"): continue
-            bk365=None
-            for bk in odds[0]["bookmakers"]:
-                if bk.get("id")==8: bk365=bk; break
-            book_to_use=bk365 if bk365 else odds[0]["bookmakers"][0]
+            book_to_use = odds[0]["bookmakers"][0]
             try:
                 for bet in book_to_use["bets"]:
                     if "OVER/UNDER" not in bet["name"].upper() and "TOTAL" not in bet["name"].upper(): continue
@@ -107,13 +111,13 @@ def lista_under_35():
                         if "under 4.5" in v["value"].lower():
                             try:
                                 q=float(v["odd"])
-                                if q > 1.20 and q < 1.55:
+                                if q >= 1.10 and q <= 1.20:
                                     risultati.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 UNDER 4.5 @ {q}\n<a href='{link_bet365}'>BET365</a>")
                             except: pass
             except: continue
             time.sleep(0.2)
-        if not risultati: return f"Nessuna Under 4.5 > 1.20 oggi {OGGI}"
-        return f"⚽ UNDER 4.5 > 1.20 - {OGGI} 24H ({len(risultati)} partite)\n\n" + "\n\n".join(risultati)
+        if not risultati: return f"Nessuna Under 4.5 1.10-1.20 nelle prossime 24H"
+        return f"⚽ UNDER 4.5 1.10-1.20 - PROSSIME 24H ({len(risultati)} partite)\nDa {now.strftime('%H:%M')} a {fine_24h.strftime('%d/%m %H:%M')}\n\n" + "\n\n".join(risultati)
     except Exception as e: return f"Errore under: {e}"
 
 def crea_bolla_15():
@@ -182,7 +186,7 @@ def poll_commands():
                         ora=datetime.now(ITALY).strftime('%H:%M'); st="PAUSA" if is_paused else "ATTIVO"
                         tg(f"📊 {st} | {ora}",from_chat,con_tastiera=True)
                     elif "under" in txt:
-                        tg("⏳ Cerco Under 4.5 > 1.20 - 24H...",from_chat)
+                        tg("⏳ Cerco Under 4.5 1.10-1.20 - 24H...",from_chat)
                         tg(lista_under_35(),from_chat,con_tastiera=True)
                     elif "bolla" in txt or "bola" in txt:
                         tg("⏳ Creo bolla solo prime squadre Bet365...",from_chat)
