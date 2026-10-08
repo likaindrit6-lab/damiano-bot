@@ -1,17 +1,21 @@
-import requests, time, threading
+import requests, time, threading, os
 from datetime import datetime, timedelta, timezone
-import pytz
 
 # === CONFIG ===
-TELEGRAM_TOKEN = "IL_TUO_TOKEN_TELEGRAM"
-API_FOOTBALL_KEY = "LA_TUA_API_KEY"
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "IL_TUO_TOKEN_TELEGRAM")
+API_FOOTBALL_KEY = os.environ.get("API_KEY", "LA_TUA_API_KEY")
+CHAT_ID = int(os.environ.get("CHAT_ID", "0") or 0)
 LIMITE = 7500
 
-ITALY = pytz.timezone("Europe/Rome")
+ITALY = timezone(timedelta(hours=2)) # Roma senza pytz - FIX
 pre=[]; av_s=[]; token_usati=0; is_paused=False
 
-def tg(msg,cid):
-    try: requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",json={"chat_id":cid,"text":msg},timeout=10)
+def tg(msg,cid=CHAT_ID):
+    try:
+        for i in range(0, len(msg), 4000):
+            requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+                          json={"chat_id":cid,"text":msg[i:i+4000]},timeout=10)
+            time.sleep(0.3)
     except: pass
 
 def api_get(url):
@@ -19,31 +23,30 @@ def api_get(url):
     try:
         r=requests.get(url,headers={"x-apisports-key":API_FOOTBALL_KEY},timeout=15).json()
         token_usati+=1
-        if "errors" in r and "rate limit" in str(r).lower(): return "LIMIT"
+        if "errors" in r and r["errors"]:
+            if "limit" in str(r["errors"]).lower(): return "LIMIT"
         return r.get("response",[])
     except: return []
 
-# === TOKEN VERO ===
 def token_vero(cid):
     try:
         st=requests.get("https://v3.football.api-sports.io/status",headers={"x-apisports-key":API_FOOTBALL_KEY},timeout=10).json()
         req=st['response']['requests']['current']
         lim=st['response']['requests']['limit_day']
         rim=lim-req
-        perc=int(req/lim*100)
-        tg(f"💰 TOKEN VERO API-FOOTBALL\n\n🔢 Usati OGGI (reali): {req}\n📉 Rimanenti: {rim} / {lim}\n📊 Uso: {perc}%\n\n🔔 Pre: {len(pre)} | 🔥 Live: {len(av_s)}\nStato: {'PAUSA' if is_paused else 'ATTIVO'}",cid)
+        perc=int(req/lim*100) if lim>0 else 0
+        tg(f"💰 TOKEN VERO\nUsati: {req}\nRimanenti: {rim}/{lim} ({perc}%)\nPre: {len(pre)} Live: {len(av_s)}",cid)
     except:
         rim=LIMITE-token_usati
-        tg(f"💰 TOKEN (locale)\nUsati: {token_usati}\nRimanenti: {rim} / {LIMITE}",cid)
+        tg(f"💰 TOKEN locale: {token_usati}\nRimanenti: {rim}/{LIMITE}",cid)
 
-# === BLASONATE VERE - SOLO BIG TEAM ===
 def bolla_blasonate(cid):
     BIG = ["inter","milan","juventus","juve","napoli","roma","lazio","atalanta","bologna","fiorentina","arsenal","manchester city","man city","liverpool","chelsea","manchester united","man united","tottenham","newcastle","aston villa","real madrid","barcelona","atletico madrid","athletic club","villarreal","betis","sevilla","bayern","dortmund","leverkusen","leipzig","stuttgart","psg","marseille","monaco","lyon","lille","benfica","porto","sporting","ajax","psv","feyenoord","galatasaray","fenerbahce","besiktas"]
-    TOP_LEAGUES = ["serie a","premier league","la liga","bundesliga","ligue 1","primeira liga","eredivisie","super lig","jupiler pro league","scottish premiership"]
-
+    TOP_LEAGUES = ["serie a","premier league","la liga","bundesliga","ligue 1","primeira liga","eredivisie","super lig"]
     OGGI=datetime.now(ITALY)
     out=[]; tot=1.0; visti=set()
-    for delta in range(1,8):
+    tg("⏳ Cerco BLASONATE...",cid)
+    for delta in range(0,8):
         data=(OGGI+timedelta(days=delta)).strftime("%Y-%m-%d")
         fx=api_get(f"https://v3.football.api-sports.io/fixtures?date={data}")
         if not fx or fx=="LIMIT": continue
@@ -51,51 +54,34 @@ def bolla_blasonate(cid):
             if len(out)>=25: break
             lega=p['league']['name'].lower()
             if not any(t in lega for t in TOP_LEAGUES): continue
-            if any(x in lega for x in ["u19","u21","u23","women","cup"]): continue
+            if any(x in lega for x in ["u19","u21","women"]): continue
             home=p['teams']['home']['name'].lower()
             away=p['teams']['away']['name'].lower()
             if not any(b in home or b in away for b in BIG): continue
             fid=p["fixture"]["id"]
             if fid in visti: continue
-            odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
-            if not odds or odds=="LIMIT" or not odds[0].get("bookmakers"): continue
-            best=None
-            for b in odds[0]["bookmakers"][0]["bets"]:
-                if "double chance" not in b["name"].lower(): continue
-                for v in b["values"]:
-                    try:
-                        q=float(v["odd"])
-                        if not 1.10<=q<=1.35: continue
-                        if "Home/Draw" in v["value"]: best={"txt":"1X","q":q}
-                        elif "Draw/Away" in v["value"]:
-                            if best is None or q>best["q"]: best={"txt":"X2","q":q}
-                    except: pass
-            if not best: continue
             visti.add(fid)
             dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
-            tot*=best["q"]
-            out.append(f"🕐 {dt.strftime('%a %d/%m %H:%M')}\n📍 {p['league']['country']} - {p['league']['name']}\n{p['teams']['home']['name']} vs {p['teams']['away']['name']}\n👉 {best['txt']} + Multigol 1-5 @ {best['q']*1.25:.2f}")
+            out.append(f"🕐 {dt.strftime('%a %d/%m %H:%M')} {p['league']['name']}\n{p['teams']['home']['name']} vs {p['teams']['away']['name']}\n👉 1X + Multigol 1-5")
 
     if not out:
-        tg("Niente BIG - sosta fino a Sab 10/10, da Sab ripartono Inter, Juve, Barca, Real, Bayern etc.\nOggi in Top c'è solo:\n- Dortmund vs Werder\n- Galatasaray vs Kasimpasa\n- Braga vs Sporting\n- Lens vs Lyon\n- PSV vs Heerenveen",cid)
+        tg("Niente BIG - sosta fino a Sab 11/10",cid)
         return
-    tg(f"🔥 BLASONATE VERE [ {len(out)} partite ] - Quota tot {tot:.2f}\n\n"+"\n\n".join(out),cid)
+    tg(f"🔥 BLASONATE VERE [{len(out)}]\n\n"+"\n\n".join(out),cid)
 
-# === OVER STATS - TORNA INDIETRO 10 PARTITE ===
 def bolla_over_stats(cid, tipo="0.5"):
     OGGI=datetime.now(ITALY)
     out=[]; visti=set()
-    soglia = 2.0 if tipo=="0.5" else 3.0
-    tg(f"⏳ Analizzo ultime 10 partite per Over {tipo}... ci metto 1 minuto",cid)
-
-    for delta in range(1,8):
+    soglia = 2.0 if tipo=="0.5" else 2.8
+    tg(f"⏳ Over {tipo} - analizzo ultime 10...",cid)
+    for delta in range(0,8):
         data=(OGGI+timedelta(days=delta)).strftime("%Y-%m-%d")
         fx=api_get(f"https://v3.football.api-sports.io/fixtures?date={data}")
         if not fx or fx=="LIMIT": continue
         for p in fx:
             if len(out)>=25: break
             lega=p['league']['name'].lower()
-            if any(x in lega for x in ["u19","u21","u23","women","3. division","2. liga","3. liga","4. liga"]): continue
+            if any(x in lega for x in ["u19","u21","women","3. division","2. liga"]): continue
             fid=p["fixture"]["id"]
             if fid in visti: continue
             home_id=p['teams']['home']['id']
@@ -103,7 +89,6 @@ def bolla_over_stats(cid, tipo="0.5"):
             h_last=api_get(f"https://v3.football.api-sports.io/fixtures?team={home_id}&last=10")
             a_last=api_get(f"https://v3.football.api-sports.io/fixtures?team={away_id}&last=10")
             if not h_last or not a_last or len(h_last)<5: continue
-
             def stats(last):
                 gol=0; zero=0; cnt=0
                 for m in last:
@@ -112,40 +97,49 @@ def bolla_over_stats(cid, tipo="0.5"):
                     tot=gh+ga
                     gol+=tot; cnt+=1
                     if tot==0: zero+=1
-                if cnt==0: return 0,10
-                return gol/cnt, zero
-
+                return (gol/cnt if cnt else 0), zero
             h_avg, h_zero = stats(h_last)
             a_avg, a_zero = stats(a_last)
             media = (h_avg + a_avg)/2
-
             if media < soglia: continue
             if h_zero>=2 or a_zero>=2: continue
-
             visti.add(fid)
             dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
-            out.append({"txt": f"🕐 {dt.strftime('%a %d/%m %H:%M')} | {p['league']['name']}\n{p['teams']['home']['name']} vs {p['teams']['away']['name']}\n📊 Media gol ultime 10: {h_avg:.1f} + {a_avg:.1f} = TOT {media:.1f}\n0-0 ultime 10: {h_zero}+{a_zero}\n👉 OVER {tipo}","media": media})
+            out.append({"txt": f"🕐 {dt.strftime('%a %d/%m %H:%M')} {p['league']['name']}\n{p['teams']['home']['name']} vs {p['teams']['away']['name']}\nMedia 10: {media:.1f} gol\n👉 OVER {tipo}","media": media})
 
     if not out:
-        tg(f"Niente Over {tipo} con media {soglia}+ trovato - sosta Nazionali",cid)
+        tg(f"Niente Over {tipo}",cid)
         return
     out = sorted(out, key=lambda x: x["media"], reverse=True)
     txt_out = "\n\n".join([x["txt"] for x in out[:25]])
-    tg(f"🔥 OVER {tipo} STATS - Media ultime 10 >= {soglia} gol\n{len(out)} partite - ordinate dalla più golosa\n\n"+txt_out,cid)
+    tg(f"🔥 OVER {tipo} - {len(out)} partite\n\n"+txt_out,cid)
 
-# === MENU ===
 def handle(txt,cid):
     global is_paused
-    txt=txt.lower()
-    if "token" in txt: token_vero(cid)
-    elif "blasonate" in txt: bolla_blasonate(cid)
-    elif "over 0.5" in txt: bolla_over_stats(cid,"0.5")
-    elif "over 1.5" in txt: bolla_over_stats(cid,"1.5")
-    elif "pausa" in txt:
-        is_paused=True; tg("⏸️ Pausa",cid)
-    elif "riprendi" in txt:
-        is_paused=False; tg("▶️ Ripreso",cid)
+    t=txt.lower()
+    if "token" in t: token_vero(cid)
+    elif "blasonate" in t: threading.Thread(target=bolla_blasonate,args=(cid,)).start()
+    elif "over 1.5" in t: threading.Thread(target=bolla_over_stats,args=(cid,"1.5")).start()
+    elif "over 0.5" in t: threading.Thread(target=bolla_over_stats,args=(cid,"0.5")).start()
     else:
         tg("Comandi:\n💰 TOKEN\n🔥 BLASONATE LUN-DOM\n🔥 OVER 0.5 STATS\n🔥 OVER 1.5 STATS",cid)
 
-# Il tuo loop Telegram resta uguale sotto...
+def main():
+    offset=0
+    print("BOT V26.1 STARTATO - SENZA PYTZ")
+    while True:
+        try:
+            r=requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates",params={"offset":offset,"timeout":30},timeout=35).json()
+            for u in r.get("result",[]):
+                offset=u["update_id"]+1
+                msg=u.get("message",{})
+                txt=msg.get("text","")
+                cid=msg.get("chat",{}).get("id",CHAT_ID)
+                if txt:
+                    handle(txt,cid)
+        except Exception as e:
+            print("loop err",e)
+            time.sleep(5)
+
+if __name__=="__main__":
+    main()
