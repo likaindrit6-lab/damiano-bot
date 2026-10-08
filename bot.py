@@ -29,16 +29,15 @@ app=Flask(__name__)
 @app.route('/')
 def home():
     s="PAUSA" if is_paused else "ATTIVO"
-    return f"BOT V23 FIX - {s}",200
+    return f"BOT V24 ELITE DC+MG - {s}",200
 
 def run_flask():
     from waitress import serve
     p=int(os.environ.get("PORT",10000))
     serve(app,host='0.0.0.0',port=p)
-
 threading.Thread(target=run_flask,daemon=True).start()
 
-TASTIERA_JSON=json.dumps({"keyboard":[["ACCENDI","SPEGNI"],["BOLLA","STATUS"]],"resize_keyboard":True,"is_persistent":True})
+TASTIERA_JSON=json.dumps({"keyboard":[["ACCENDI","SPEGNI"],["BOLLA","BOLLA ELITE"],["STATUS"]],"resize_keyboard":True,"is_persistent":True})
 
 def tg(m,chat_id=None,con_tastiera=False):
     try:
@@ -63,7 +62,7 @@ def api_get(url):
 def crea_bolla_15():
     global ultima_bolla_time
     try:
-        if time.time()-ultima_bolla_time<120:
+        if time.time()-ultima_bolla_time<60:
             return None
         OGGI=datetime.now(ITALY).strftime("%Y-%m-%d")
         fixtures=api_get(f"https://v3.football.api-sports.io/fixtures?date={OGGI}")
@@ -73,9 +72,7 @@ def crea_bolla_15():
         quota_tot=1.0
         fixtures=sorted(fixtures,key=lambda x:x["fixture"]["timestamp"])
         for p in fixtures:
-            if len(picks)>=12:
-                break
-            if quota_tot>=3.35:
+            if len(picks)>=12 or quota_tot>=3.35:
                 break
             fid=p["fixture"]["id"]
             dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
@@ -87,19 +84,14 @@ def crea_bolla_15():
             lega=p["league"]["name"]
             orario=dt.strftime("%H:%M")
             odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
-            if not odds or odds=="LIMIT":
-                continue
-            if not odds[0].get("bookmakers"):
+            if not odds or odds=="LIMIT" or not odds[0].get("bookmakers"):
                 continue
             try:
                 best=None
                 for bet in odds[0]["bookmakers"][0]["bets"]:
-                    if "First Half" in bet["name"]:
-                        continue
-                    if "Corners" in bet["name"]:
-                        continue
-                    if "Cards" in bet["name"]:
-                        continue
+                    if "First Half" in bet["name"]: continue
+                    if "Corners" in bet["name"]: continue
+                    if "Cards" in bet["name"]: continue
                     for v in bet["values"]:
                         try:
                             q=float(v["odd"])
@@ -108,19 +100,11 @@ def crea_bolla_15():
                                     best={"m":bet["name"],"e":v["value"],"q":q}
                         except:
                             continue
-                if not best:
-                    continue
-                if quota_tot*best["q"]>3.45:
-                    continue
-                m_name=best["m"]
-                m_val=best["e"]
+                if not best: continue
+                if quota_tot*best["q"]>3.45: continue
+                m_name=best["m"]; m_val=best["e"]
                 if "Match Winner" in m_name:
-                    if "Home" in m_val:
-                        txt="VINCENTE: 1"
-                    elif "Away" in m_val:
-                        txt="VINCENTE: 2"
-                    else:
-                        txt="VINCENTE: X"
+                    txt="VINCENTE: 1" if "Home" in m_val else "VINCENTE: 2" if "Away" in m_val else "VINCENTE: X"
                 elif "Double Chance" in m_name:
                     mv=m_val.replace("Home/Draw","1X").replace("Draw/Away","X2").replace("Home/Away","12")
                     txt=f"DC: {mv}"
@@ -140,6 +124,76 @@ def crea_bolla_15():
         return f"BOLLA ODIERNA 80%+ {OGGI} - Quota {quota_tot:.2f}\n\n" + "\n\n".join(picks) + f"\n\nTOT {quota_tot:.2f}"
     except Exception as e:
         return f"Errore bolla: {e}"
+
+def crea_bolla_elite():
+    try:
+        picks=[]
+        quota_tot=1.0
+        oggi=datetime.now(ITALY)
+        lunedi=oggi - timedelta(days=oggi.weekday())
+        for i in range(7):
+            if len(picks)>=20 or quota_tot>=15:
+                break
+            data=(lunedi+timedelta(days=i)).strftime("%Y-%m-%d")
+            fixtures=api_get(f"https://v3.football.api-sports.io/fixtures?date={data}")
+            if not fixtures:
+                continue
+            fixtures=sorted(fixtures,key=lambda x:x["fixture"]["timestamp"])
+            for p in fixtures:
+                if len(picks)>=20 or quota_tot>=15:
+                    break
+                fid=p["fixture"]["id"]
+                dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
+                if dt<datetime.now(ITALY):
+                    continue
+                home=p["teams"]["home"]["name"]
+                away=p["teams"]["away"]["name"]
+                paese=p["league"]["country"]
+                lega=p["league"]["name"]
+                orario=dt.strftime("%H:%M")
+                giorno=dt.strftime("%a %d/%m")
+                odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
+                if not odds or odds=="LIMIT" or not odds[0].get("bookmakers"):
+                    continue
+                try:
+                    dc=None
+                    under55=None
+                    for bet in odds[0]["bookmakers"][0]["bets"]:
+                        if "Double Chance" in bet["name"]:
+                            for v in bet["values"]:
+                                try:
+                                    q=float(v["odd"])
+                                    if 1.10<=q<=1.45:
+                                        if dc is None or q>dc["q"]:
+                                            dc={"val":v["value"],"q":q}
+                                except:
+                                    continue
+                        if "Over/Under" in bet["name"]:
+                            for v in bet["values"]:
+                                try:
+                                    if "Under 5.5" in v["value"]:
+                                        q=float(v["odd"])
+                                        if 1.05<=q<=1.35:
+                                            under55={"val":v["value"],"q":q}
+                                except:
+                                    continue
+                    if not dc or not under55:
+                        continue
+                    combo_q=round(dc["q"]*under55["q"],2)
+                    if quota_tot*combo_q>16:
+                        continue
+                    dcv=dc["val"].replace("Home/Draw","1X").replace("Draw/Away","X2").replace("Home/Away","12")
+                    txt_combo=f"{dcv} + MG 1-5"
+                    quota_tot*=combo_q
+                    quota_tot=round(quota_tot,2)
+                    picks.append(f"{giorno} {orario} - {paese} - {lega}\n{home} vs {away}\n-> {txt_combo} @ {combo_q} [DC {dc['q']} x MG {under55['q']}]")
+                except:
+                    continue
+        if len(picks)<3:
+            return f"Bolla Elite: trovate solo {len(picks)} partite DC+MG, riprova tra 10 min"
+        return f"BOLLA ELITE DC + MG 1-5 PlanetWin - Quota {quota_tot:.2f}\nLun-Dom\n\n" + "\n\n".join(picks) + f"\n\nTOT {quota_tot:.2f}"
+    except Exception as e:
+        return f"Errore elite: {e}"
 
 def poll_commands():
     global is_paused,last_update_id,bolla_lock
@@ -163,12 +217,19 @@ def poll_commands():
                     elif "status" in txt:
                         ora=datetime.now(ITALY).strftime('%H:%M')
                         st="PAUSA" if is_paused else "ATTIVO"
-                        tg(f"{st} | {ora}",from_chat,con_tastiera=True)
-                    elif "bolla" in txt or "bola" in txt:
-                        if bolla_lock:
-                            continue
+                        tg(f"{st} | {ora} | Coda tripla {len(tripla_coda)}",from_chat,con_tastiera=True)
+                    elif "elite" in txt:
+                        if bolla_lock: continue
                         bolla_lock=True
-                        tg("Creo bolla...",from_chat)
+                        tg("Creo BOLLA ELITE DC+MG 1-5... 30 sec",from_chat)
+                        res=crea_bolla_elite()
+                        if res:
+                            tg(res,from_chat,con_tastiera=True)
+                        bolla_lock=False
+                    elif "bolla" in txt or "bola" in txt:
+                        if bolla_lock: continue
+                        bolla_lock=True
+                        tg("Creo bolla 80%...",from_chat)
                         res=crea_bolla_15()
                         if res:
                             tg(res,from_chat,con_tastiera=True)
@@ -202,12 +263,7 @@ while True:
         now=datetime.now(ITALY)
         if 0<=now.hour<10:
             if now.hour==0:
-                av_s.clear()
-                pre.clear()
-                pre1.clear()
-                av_g.clear()
-                cache.clear()
-                tripla_coda.clear()
+                av_s.clear(); pre.clear(); pre1.clear(); av_g.clear(); cache.clear(); tripla_coda.clear()
             time.sleep(600)
             continue
         live=api_get("https://v3.football.api-sports.io/fixtures?live=all")
@@ -230,14 +286,10 @@ while True:
             mm=g["fixture"]["status"]["elapsed"]
             if mm is None or fid in av_s:
                 continue
-            home=g["teams"]["home"]["name"]
-            away=g["teams"]["away"]["name"]
-            gh=g["goals"]["home"]
-            ga=g["goals"]["away"]
-            paese=g["league"]["country"]
-            lega=g["league"]["name"]
-            flag=get_flag(paese)
-            pref=f"{flag} {paese.upper()} - {lega}"
+            home=g["teams"]["home"]["name"]; away=g["teams"]["away"]["name"]
+            gh=g["goals"]["home"]; ga=g["goals"]["away"]
+            paese=g["league"]["country"]; lega=g["league"]["name"]
+            flag=get_flag(paese); pref=f"{flag} {paese.upper()} - {lega}"
             def tiri():
                 d=cache.get(fid)
                 if not d or time.time()-d.get('time',0)>180:
