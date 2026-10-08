@@ -39,7 +39,7 @@ def run_flask():
 threading.Thread(target=run_flask,daemon=True).start()
 
 TASTIERA_JSON=json.dumps({
-    "keyboard":[["🟢 ACCENDI","🔴 SPEGNI"],["🎫 BOLLA","📊 STATUS"]],
+    "keyboard":[["ACCENDI","SPEGNI"],["BOLLA","STATUS"]],
     "resize_keyboard":True,
     "is_persistent":True
 })
@@ -83,10 +83,10 @@ def crea_bolla_15():
             fid=p["fixture"]["id"]
             dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
             if dt < datetime.now(ITALY): continue
-            home=p['teams']['home']['name']
-            away=p['teams']['away']['name']
-            paese=p['league']['country']
-            lega=p['league']['name']
+            home=p["teams"]["home"]["name"]
+            away=p["teams"]["away"]["name"]
+            paese=p["league"]["country"]
+            lega=p["league"]["name"]
             orario=dt.strftime("%H:%M")
             qenc=urllib.parse.quote_plus(home+" "+away)
             qenc_bet=urllib.parse.quote_plus(home+" "+away+" site:bet365.it")
@@ -128,7 +128,7 @@ def crea_bolla_15():
                 else:
                     txt=f"{m_name}: {m_val}"
                 quota_tot*=best["q"]
-                picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {txt} @ {best['q']}\n<a href='{link_bet365}'>BET365</a> | <a href='{link_stats}'>STATS</a> | <a href='{link_google}'>GOOGLE</a>")
+                picks.append(f"{orario} - {paese} - {lega}\n{home} vs {away}\n-> {txt} @ {best['q']}\nBET365: {link_bet365}\nSTATS: {link_stats}\nGOOGLE: {link_google}")
             except:
                 continue
         if len(picks)<5:
@@ -136,7 +136,7 @@ def crea_bolla_15():
         if len(picks)==5 and quota_tot<3.00:
             return f"Oggi poche partite da 80%, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f} - aspetto 3.00"
         ultima_bolla_time=time.time()
-        return f"🔥 BOLLA ODIERNA 80%+ {OGGI} - Quota {quota_tot:.2f} 🔥\n\n"+"\n\n".join(picks)+f"\n\n💰 TOT {quota_tot:.2f} - {len(picks)} partite"
+        return f"BOLLA ODIERNA 80%+ {OGGI} - Quota {quota_tot:.2f}\n\n"+"\n\n".join(picks)+f"\n\nTOT {quota_tot:.2f} - {len(picks)} partite"
     except Exception as e:
         return f"Errore bolla: {e}"
 
@@ -153,21 +153,21 @@ def poll_commands():
                     msg=upd.get("message",{})
                     txt=msg.get("text","").lower().split("@")[0].strip()
                     from_chat=msg.get("chat",{}).get("id")
-                    if "spegni" in txt or txt.startswith("/pausa") or txt in ["pausa","stop","🔴 spegni"]:
+                    if "spegni" in txt or "pausa" in txt or "stop" in txt:
                         is_paused=True
-                        tg("🛑 PAUSA",from_chat,con_tastiera=True)
-                    elif "accendi" in txt or txt.startswith("/riprendi") or txt in ["/on","/start","on","🟢 accendi"]:
+                        tg("PAUSA",from_chat,con_tastiera=True)
+                    elif "accendi" in txt or "riprendi" in txt or txt in ["/on","/start","on"]:
                         is_paused=False
-                        tg("✅ RIPRESO",from_chat,con_tastiera=True)
+                        tg("RIPRESO",from_chat,con_tastiera=True)
                     elif "status" in txt:
                         ora=datetime.now(ITALY).strftime('%H:%M')
                         st="PAUSA" if is_paused else "ATTIVO"
-                        tg(f"📊 {st} | {ora}",from_chat,con_tastiera=True)
+                        tg(f"{st} | {ora}",from_chat,con_tastiera=True)
                     elif "bolla" in txt or "bola" in txt:
                         if bolla_lock:
                             continue
                         bolla_lock=True
-                        tg("⏳ Creo bolla...",from_chat)
+                        tg("Creo bolla...",from_chat)
                         res=crea_bolla_15()
                         if res:
                             tg(res,from_chat,con_tastiera=True)
@@ -181,4 +181,101 @@ threading.Thread(target=poll_commands,daemon=True).start()
 
 def get_stat(a, n):
     for s in a:
-        if s.get('type') ==
+        t = s.get("type")
+        if t == n:
+            try:
+                v = str(s.get("value") or 0).replace("%","").strip() or 0
+                return int(v)
+            except:
+                return 0
+    return 0
+
+def get_flag(p):
+    m={"Italy":"IT","England":"GB","Spain":"ES","Germany":"DE","France":"FR","Portugal":"PT","Netherlands":"NL","Belgium":"BE","Turkey":"TR","Brazil":"BR","Argentina":"AR","USA":"US","Australia":"AU","Japan":"JP","South Korea":"KR"}
+    return m.get(p,f"[{p}]")
+
+while True:
+    try:
+        if is_paused:
+            time.sleep(60)
+            continue
+        now=datetime.now(ITALY)
+        if 0<=now.hour<10:
+            if now.hour==0:
+                av_s.clear()
+                pre.clear()
+                pre1.clear()
+                av_g.clear()
+                cache.clear()
+                tripla_coda.clear()
+            time.sleep(600)
+            continue
+        live=api_get("https://v3.football.api-sports.io/fixtures?live=all")
+        if live=="LIMIT":
+            time.sleep(3600)
+            continue
+        if not live:
+            time.sleep(60)
+            continue
+        if time.time()-ultimo_invio_tripla>=3600 and len(tripla_coda)>=2:
+            txt=f"TRIPLA ORARIA {now.strftime('%H:%M')}\n\n"
+            for p in tripla_coda[:3]:
+                txt+=f"{p['flag']} {p['pref']} | {p['min']}' | Tiri:{p['sot']} | {p['home']} {p['gh']}-{p['ga']} {p['away']}\n"
+            tg(txt)
+            tripla_coda=tripla_coda[3:]
+            ultimo_invio_tripla=time.time()
+        for g in live:
+            fid=g["fixture"]["id"]
+            st=g["fixture"]["status"]["short"]
+            mm=g["fixture"]["status"]["elapsed"]
+            if mm is None or fid in av_s:
+                continue
+            home=g["teams"]["home"]["name"]
+            away=g["teams"]["away"]["name"]
+            gh=g["goals"]["home"]
+            ga=g["goals"]["away"]
+            paese=g["league"]["country"]
+            lega=g["league"]["name"]
+            flag=get_flag(paese)
+            pref=f"{flag} {paese.upper()} - {lega}"
+            def tiri():
+                d=cache.get(fid)
+                if not d or time.time()-d.get('time',0)>180:
+                    s=api_get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
+                    if s and len(s)>=2:
+                        sot=get_stat(s[0]["statistics"],"Shots on Goal")+get_stat(s[1]["statistics"],"Shots on Goal")
+                        cache[fid]={"sot":sot,"time":time.time()}
+                        time.sleep(0.4)
+                        return sot
+                    return d.get("sot",0) if d else 0
+                return d.get("sot",0)
+            if st=="HT" and fid not in pre1:
+                so=tiri()
+                if so>=3:
+                    tg(f"FINE 1T {pref} | Tiri:{so} | {home} {gh}-{ga} {away}")
+                    pre1.add(fid)
+            if 46<=(mm or 0)<=69 and fid not in pre:
+                so=tiri()
+                if so>=5:
+                    tg(f"PREPARATI {mm}' {pref} | Tiri:{so} | {home} {gh}-{ga} {away} | NEXT")
+                    pre.add(fid)
+            if (mm or 0)==70 and fid not in av_s:
+                so=tiri()
+                if so>=4:
+                    sq=home if gh<=ga else away
+                    tg(f"GIOCALO {mm}' >85% {pref} | Tiri:{so} | {home} {gh}-{ga} {away} | NEXT {sq}")
+                    av_s.add(fid)
+                    av_g[fid]=gh+ga
+                    if not any(x['fid']==fid for x in tripla_coda):
+                        tripla_coda.append({'fid':fid,'flag':flag,'pref':f"{paese} - {lega}",'min':mm,'sot':so,'home':home,'away':away,'gh':gh,'ga':ga})
+        for g in live:
+            fid=g["fixture"]["id"]
+            if fid in av_g:
+                tot=g["goals"]["home"]+g["goals"]["away"]
+                if tot>av_g[fid]:
+                    flag=get_flag(g["league"]["country"])
+                    tg(f"GOAL VINTO! {flag} {g['league']['country'].upper()} - {g['league']['name']} | {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}")
+                    del av_g[fid]
+        time.sleep(60)
+    except:
+        time.sleep(15)
