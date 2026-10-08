@@ -35,7 +35,7 @@ def run_flask():
 threading.Thread(target=run_flask,daemon=True).start()
 
 TASTIERA_JSON=json.dumps({
-    "keyboard":[["🟢 ACCENDI","🔴 SPEGNI"],["🎫 BOLLA","⬇️ UNDER"],["📊 STATUS"]],
+    "keyboard":[["🟢 ACCENDI","🔴 SPEGNI"],["🎫 BOLLA","⬇️ UNDER"],["📊 STATUS","📊 TOKEN"]],
     "resize_keyboard":True,"is_persistent":True
 })
 
@@ -55,6 +55,34 @@ def api_get(url):
         if r.status_code==429: return "LIMIT"
         return r.json().get("response",[])
     except: return []
+
+# --- NUOVA FUNZIONE TOKEN ZIO ---
+def get_token_status():
+    try:
+        url="https://v3.football.api-sports.io/status"
+        r=requests.get(url,headers={"x-apisports-key":API_FOOTBALL_KEY},timeout=10)
+        if r.status_code!=200:
+            return f"❌ Errore API-FOOTBALL: {r.status_code}"
+        data=r.json()["response"]
+        req=data["requests"]
+        acc=data["account"]
+        current=req.get("current",0)
+        limit=req.get("limit_day",7500)
+        remaining=limit-current
+        perc=int((current/limit)*100) if limit>0 else 0
+
+        barra="🟢" if perc<70 else "🟡" if perc<90 else "🔴"
+
+        return (
+            f"{barra} <b>API-FOOTBALL TOKEN</b>\n\n"
+            f"📊 Usati oggi: <b>{current} / {limit}</b> ({perc}%)\n"
+            f"✅ Rimasti: <b>{remaining}</b>\n"
+            f"👤 Piano: {acc.get('firstname','')} {acc.get('lastname','')}\n"
+            f"📧 {acc.get('email','')}\n"
+            f"⏰ {datetime.now(ITALY).strftime('%d/%m %H:%M')}"
+        )
+    except Exception as e:
+        return f"❌ Errore token: {e}"
 
 def crea_bolla_15():
     try:
@@ -148,10 +176,14 @@ def poll_commands():
                         is_paused=True; tg("🛑 PAUSA",from_chat,con_tastiera=True)
                     elif "accendi" in txt or txt.startswith("/riprendi") or txt in ["/on","/start","on","🟢 accendi"]:
                         is_paused=False; tg("✅ RIPRESO",from_chat,con_tastiera=True)
+                    elif "token" in txt:
+                        tg("⏳ Controllo token...",from_chat)
+                        tg(get_token_status(),from_chat,con_tastiera=True)
                     elif "status" in txt:
                         ora=datetime.now(ITALY).strftime('%H:%M')
                         st="PAUSA" if is_paused else "ATTIVO"
-                        tg(f"📊 {st} | {ora} | Coda tripla:{len(tripla_coda)}",from_chat,con_tastiera=True)
+                        info_bot=f"📊 {st} | {ora} | Coda tripla:{len(tripla_coda)}"
+                        tg(info_bot + "\n\n" + get_token_status(),from_chat,con_tastiera=True)
                     elif "bolla" in txt or "bola" in txt:
                         tg("⏳ Creo bolla...",from_chat); tg(crea_bolla_15(),from_chat,con_tastiera=True)
                     elif "under" in txt:
