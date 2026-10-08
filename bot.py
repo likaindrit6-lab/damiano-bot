@@ -16,8 +16,8 @@ pre1=set()
 cache={}
 tripla_coda=[]
 ultimo_invio_tripla=time.time()
-ultima_bolla_time=0 # FIX ANTI-DOPPIA
-bolla_lock=False # FIX ANTI-DOPPIA
+ultima_bolla_time=0
+bolla_lock=False
 
 try:
     base=f"https://api.telegram.org/bot{BOT_TOKEN}"
@@ -29,7 +29,7 @@ app=Flask(__name__)
 @app.route('/')
 def home():
     s="PAUSA" if is_paused else "ATTIVO"
-    return f"BOT V18 FIX GOOGLE - {s}",200
+    return f"BOT V18 - 70 SOLO - {s}",200
 
 def run_flask():
     from waitress import serve
@@ -68,7 +68,6 @@ def api_get(url):
 def crea_bolla_15():
     global ultima_bolla_time
     try:
-        # FIX ANTI-DOPPIA - blocca se richiesta < 2 min
         if time.time() - ultima_bolla_time < 120:
             return None
         OGGI=datetime.now(ITALY).strftime("%Y-%m-%d")
@@ -109,7 +108,8 @@ def crea_bolla_15():
                             if 1.08 <= q <= 1.30:
                                 if best is None or q > best["q"]:
                                     best={"m":bet["name"],"e":v["value"],"q":q}
-                        except: continue
+                        except:
+                            continue
                 if not best: continue
                 if quota_tot*best["q"]>3.45: continue
                 m_name=best["m"]
@@ -129,7 +129,8 @@ def crea_bolla_15():
                     txt=f"{m_name}: {m_val}"
                 quota_tot*=best["q"]
                 picks.append(f"🕐 {orario} - {paese} - {lega}\n{home} vs {away}\n👉 {txt} @ {best['q']}\n<a href='{link_bet365}'>BET365</a> | <a href='{link_stats}'>STATS</a> | <a href='{link_google}'>GOOGLE</a>")
-            except: continue
+            except:
+                continue
         if len(picks)<5:
             return f"Oggi poche partite da 80%, riprova tra 1h. Trovate {len(picks)} per quota {quota_tot:.2f}"
         if len(picks)==5 and quota_tot<3.00:
@@ -163,7 +164,8 @@ def poll_commands():
                         st="PAUSA" if is_paused else "ATTIVO"
                         tg(f"📊 {st} | {ora}",from_chat,con_tastiera=True)
                     elif "bolla" in txt or "bola" in txt:
-                        if bolla_lock: continue
+                        if bolla_lock:
+                            continue
                         bolla_lock=True
                         tg("⏳ Creo bolla...",from_chat)
                         res=crea_bolla_15()
@@ -177,5 +179,6 @@ def poll_commands():
 
 threading.Thread(target=poll_commands,daemon=True).start()
 
-def get_stat(a,n):
+def get_stat(a, n):
     for s in a:
+        if s.get('type') ==
