@@ -19,7 +19,7 @@ app=Flask(__name__)
 @app.route('/')
 def home():
     s="PAUSA 0 CONSUMI" if is_paused else "ATTIVO"
-    return "BOT V30.7 FIX QUOTES - "+s,200
+    return "BOT V30.8 BLASONATE FIX - "+s,200
 
 def run_flask():
     from waitress import serve
@@ -78,22 +78,40 @@ def get_token_status():
         return "Errore token: "+str(e)
 
 def get_flag(p):
-    m={"Italy":"\U0001F1EE\U0001F1F9","England":"\U0001F1EC\U0001F1E7","Spain":"\U0001F1EA\U0001F1F8","Germany":"\U0001F1E9\U0001F1EA","France":"\U0001F1EB\U0001F1F7","Portugal":"\U0001F1F5\U0001F1F9","Netherlands":"\U0001F1F3\U0001F1F1","Belgium":"\U0001F1E7\U0001F1EA","Turkey":"\U0001F1F9\U0001F1F7","Brazil":"\U0001F1E7\U0001F1F7","Argentina":"\U0001F1E6\U0001F1F7","Iran":"\U0001F1EE\U0001F1F7"}
+    m={"Italy":"\U0001F1EE\U0001F1F9","England":"\U0001F1EC\U0001F1E7","Spain":"\U0001F1EA\U0001F1F8","Germany":"\U0001F1E9\U0001F1EA","France":"\U0001F1EB\U0001F1F7","Portugal":"\U0001F1F5\U0001F1F9","Netherlands":"\U0001F1F3\U0001F1F1","Belgium":"\U0001F1E7\U0001F1EA","Turkey":"\U0001F1F9\U0001F1F7","Brazil":"\U0001F1E7\U0001F1F7","Argentina":"\U0001F1E6\U0001F1F7"}
     return m.get(p,"\U0001F3F3\uFE0F")
 
 def is_ok_league(l,c):
     s=(l+" "+c).lower()
-    bad=["women","female","u19","u21","u23","reserve","youth","futsal","amateur"]
+    bad=["women","female","u19","u21","u23","u20","u18","reserve","youth","futsal","amateur","cup","copa","pokal","fa cup","coppa"]
     for x in bad:
         if x in s:
             return False
     return True
 
+def is_team_ok(home,away):
+    # FIX - via squadre II / B / U23 / Riserve
+    t=(home+" "+away).lower()
+    bad=[" ii"," iii"," b team"," u19"," u21"," u23"," reserves"," ii "," (b)"]
+    for x in bad:
+        if x in t:
+            return False
+    if home.endswith(" II") or away.endswith(" II"):
+        return False
+    if home.endswith(" B") or away.endswith(" B"):
+        return False
+    return True
+
 def is_blasonata(l,c):
+    # FIX VERO - solo leghe top europee + brasile argentina
     if not is_ok_league(l,c):
         return False
+    allowed_countries=["Italy","England","Spain","Germany","France","Portugal","Netherlands","Belgium","Brazil","Argentina","Scotland","Turkey"]
+    if c not in allowed_countries:
+        return False
     ln=l.lower()
-    k=["serie a","serie b","premier league","championship","laliga","la liga","segunda","bundesliga","ligue 1","ligue 2","primeira","eredivisie","pro league","super lig","brasileiro","liga profesional"]
+    # solo prime 2 divisioni, niente coppe
+    k=["serie a","serie b","premier league","championship","la liga","laliga","la liga 2","segunda division","bundesliga","2. bundesliga","ligue 1","ligue 2","primeira liga","eredivisie","pro league","jupiler","serie a","brasileiro","liga profesional"]
     for x in k:
         if x in ln:
             return True
@@ -114,15 +132,19 @@ def crea_blasonate_lun_sab():
             giorno=(d1+timedelta(days=i)).strftime("%Y-%m-%d")
             fx=api_get("https://v3.football.api-sports.io/fixtures?date="+giorno)
             if fx=="LIMIT":
+                time.sleep(1)
                 continue
+            # FILTRO BLASONATA VERA
             fx=[f for f in fx if is_blasonata(f['league']['name'],f['league']['country'])]
+            fx=[f for f in fx if is_team_ok(f['teams']['home']['name'],f['teams']['away']['name'])]
             tutte.extend(fx)
-            time.sleep(0.2)
+            time.sleep(0.3)
         if not tutte:
-            return "Nessuna blasonata "+label+" - sosta nazionali"
+            return "Sosta nazionali questa settimana - 0 blasonate "+label
+
         cand=[]
         for p in sorted(tutte,key=lambda x:x["fixture"]["timestamp"]):
-            if len(cand)>=80:
+            if len(cand)>=100:
                 break
             fid=p["fixture"]["id"]
             dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
@@ -143,7 +165,7 @@ def crea_blasonate_lun_sab():
                         for v in bet["values"]:
                             try:
                                 q=float(v["odd"])
-                                if 1.08 <= q <= 1.45:
+                                if 1.08 <= q <= 1.50:
                                     if not best or q < best["q"]:
                                         best={"q":q,"m":bet["name"],"e":v["value"]}
                             except:
@@ -156,173 +178,11 @@ def crea_blasonate_lun_sab():
             link2="https://www.google.com/search?q="+qenc2+"&btnI=1"
             prob=int((1/best["q"])*100)
             if "Double" in best["m"]:
-                tipo="DOPPIA "+best["e"]
+                tipo="DOPPIA "+best["e"].replace("Home/Draw","1X").replace("Draw/Away","X2").replace("Home/Away","12")
             else:
                 tipo="MULTIGOL 1-5 "+best["e"]
             txt=flag+" "+paese.upper()+" | "+ora+" | "+lega+"\n"+home+" vs "+away+"\n-> "+tipo+" @ "+str(best["q"])+" ("+str(prob)+"%)\n<a href='"+link+"'>BET365</a> | <a href='"+link2+"'>PLANETWIN365</a>"
             cand.append({"q":best["q"],"txt":txt})
+
         if not cand:
-            return "0 blasonate "+label
-        cand=sorted(cand,key=lambda x:x["q"])
-        picks=cand[:25]
-        tot=1
-        for x in picks:
-            tot*=x["q"]
-        body="\n\n".join([p["txt"] for p in picks])
-        return "BLASONATE "+label+" - "+str(len(picks))+" PARTITE - Quota "+str(round(tot,2))+"\n\n"+body+"\n\nTOT "+str(round(tot,2))
-    except Exception as e:
-        return "Errore blasonate: "+str(e)
-
-def crea_partite_oggi():
-    try:
-        OGGI=datetime.now(ITALY).strftime("%Y-%m-%d")
-        fx=api_get("https://v3.football.api-sports.io/fixtures?date="+OGGI)
-        if fx=="LIMIT":
-            return "Limite API - aspetta 1h"
-        fx=[f for f in fx if is_ok_league(f['league']['name'],f['league']['country'])]
-        fx=sorted(fx,key=lambda x:x["fixture"]["timestamp"])
-        cand=[]
-        for p in fx:
-            if len(cand)>=100:
-                break
-            fid=p["fixture"]["id"]
-            dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
-            if dt < datetime.now(ITALY):
-                continue
-            home=p['teams']['home']['name']
-            away=p['teams']['away']['name']
-            paese=p['league']['country']
-            lega=p['league']['name']
-            flag=get_flag(paese)
-            ora=dt.strftime("%H:%M")
-            odds=api_get("https://v3.football.api-sports.io/odds?fixture="+str(fid))
-            if not odds or odds=="LIMIT" or not odds[0].get("bookmakers"):
-                continue
-            best=None
-            for b in odds[0]["bookmakers"]:
-                for bet in b["bets"]:
-                    bn=bet["name"].lower()
-                    if "double chance" in bn or "multigoal" in bn:
-                        for v in bet["values"]:
-                            try:
-                                q=float(v["odd"])
-                                if 1.08 <= q <= 1.35:
-                                    if not best or q < best["q"]:
-                                        best={"q":q,"m":bet["name"],"e":v["value"]}
-                            except:
-                                pass
-            if not best:
-                continue
-            qenc=urllib.parse.quote_plus(home+" "+away+" site:bet365.it")
-            link="https://www.google.com/search?q="+qenc+"&btnI=1"
-            qenc2=urllib.parse.quote_plus(home+" "+away+" site:planetwin365.it")
-            link2="https://www.google.com/search?q="+qenc2+"&btnI=1"
-            prob=int((1/best["q"])*100)
-            if "Double" in best["m"]:
-                tipo="DOPPIA "+best["e"]
-            else:
-                tipo="MULTIGOL "+best["e"]
-            txt=flag+" "+paese.upper()+" | "+ora+" | "+lega+"\n"+home+" vs "+away+"\n-> "+tipo+" @ "+str(best["q"])+" ("+str(prob)+"%)\n<a href='"+link+"'>BET365</a> | <a href='"+link2+"'>PLANETWIN365</a>"
-            cand.append({"q":best["q"],"txt":txt})
-        if not cand:
-            return "0 partite oggi "+OGGI
-        cand=sorted(cand,key=lambda x:x["q"])
-        picks=cand[:15]
-        tot=1
-        for x in picks:
-            tot*=x["q"]
-        body="\n\n".join([p["txt"] for p in picks])
-        return "PARTITE OGGI "+OGGI+" - 90% - "+str(len(picks))+" partite - "+str(round(tot,2))+"\n\n"+body+"\n\nTOT "+str(round(tot,2))
-    except Exception as e:
-        return "Errore oggi: "+str(e)
-
-def crea_under():
-    try:
-        OGGI=datetime.now(ITALY).strftime("%Y-%m-%d")
-        fx=api_get("https://v3.football.api-sports.io/fixtures?date="+OGGI)
-        fx=[f for f in fx if is_ok_league(f['league']['name'],f['league']['country'])]
-        picks=[]
-        for p in fx:
-            if len(picks)>=10:
-                break
-            fid=p["fixture"]["id"]
-            dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
-            if dt < datetime.now(ITALY):
-                continue
-            home=p['teams']['home']['name']
-            away=p['teams']['away']['name']
-            paese=p['league']['country']
-            lega=p['league']['name']
-            flag=get_flag(paese)
-            ora=dt.strftime("%H:%M")
-            odds=api_get("https://v3.football.api-sports.io/odds?fixture="+str(fid))
-            if not odds or odds=="LIMIT" or not odds[0].get("bookmakers"):
-                continue
-            for b in odds[0]["bookmakers"]:
-                for bet in b["bets"]:
-                    if "Over/Under" in bet["name"]:
-                        for v in bet["values"]:
-                            if "Under 4.5" in v["value"]:
-                                try:
-                                    q=float(v["odd"])
-                                    if 1.12 <= q <= 1.40:
-                                        qenc=urllib.parse.quote_plus(home+" "+away+" site:bet365.it")
-                                        link="https://www.google.com/search?q="+qenc+"&btnI=1"
-                                        prob=int((1/q)*100)
-                                        txt=flag+" "+paese.upper()+" | "+ora+" | "+lega+"\n"+home+" vs "+away+"\n-> UNDER 4.5 @ "+str(q)+" ("+str(prob)+"%)\n<a href='"+link+"'>BET365</a>"
-                                        picks.append(txt)
-                                except:
-                                    pass
-        if not picks:
-            return "0 UNDER oggi"
-        body="\n\n".join(picks)
-        return "UNDER 4.5 OGGI - "+str(len(picks))+" partite\n\n"+body
-    except Exception as e:
-        return "Errore under: "+str(e)
-
-def poll_commands():
-    global is_paused,last_update_id
-    while True:
-        try:
-            base="https://api.telegram.org/bot"+BOT_TOKEN
-            r=requests.get(base+"/getUpdates?offset="+str(last_update_id+1)+"&timeout=25",timeout=35).json()
-            if r.get("ok"):
-                for upd in r.get("result",[]):
-                    last_update_id=upd["update_id"]
-                    txt=upd.get("message",{}).get("text","").lower()
-                    chat=upd.get("message",{}).get("chat",{}).get("id")
-                    if "spegni" in txt:
-                        is_paused=True
-                        tg("PAUSA 0 CONSUMI",chat,con_tastiera=True)
-                    elif "accendi" in txt or "/start" in txt:
-                        is_paused=False
-                        tg("BOT V30.7 FIXATO - PRONTO",chat,con_tastiera=True)
-                    elif "token" in txt:
-                        tg(get_token_status(),chat,con_tastiera=True)
-                    elif "lun-sab" in txt or "blasonate" in txt:
-                        tg("Cerco BLASONATE LUN-SAB 20-25...",chat)
-                        tg(crea_blasonate_lun_sab(),chat,con_tastiera=True)
-                    elif "partite oggi" in txt or "oggi" in txt:
-                        tg("Cerco PARTITE OGGI 90%...",chat)
-                        tg(crea_partite_oggi(),chat,con_tastiera=True)
-                    elif "under" in txt:
-                        tg("Cerco UNDER 4.5...",chat)
-                        tg(crea_under(),chat,con_tastiera=True)
-        except:
-            pass
-        time.sleep(2)
-
-threading.Thread(target=poll_commands,daemon=True).start()
-
-while True:
-    try:
-        if is_paused:
-            time.sleep(300)
-            continue
-        now=datetime.now(ITALY)
-        if 0 <= now.hour < 10:
-            time.sleep(600)
-            continue
-        time.sleep(180)
-    except:
-        time.sleep(15)
+            return "0 blasonate con quota
