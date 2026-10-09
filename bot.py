@@ -4,14 +4,21 @@ from datetime import datetime,timezone,timedelta
 from zoneinfo import ZoneInfo
 BOT=os.getenv('BOT_TOKEN');CHAT=os.getenv('CHAT_ID');KEY=os.getenv('API_FOOTBALL_KEY')
 ITALY=timezone(timedelta(hours=2));ROME=ZoneInfo("Europe/Rome")
-is_paused=False;last_id=0;av_g={};av_s=set();av_s_first=set();last_bolla_hour=-1
+is_paused=False;last_id=0;av_g={};av_s=set();av_s_first=set();last_bolla_hour=-1;last_doppia_hour=-1
 LEAGUES={'Serie A':135,'Serie B':136,'Inghilterra':39,'Spagna':140,'Germania':78,'Francia':61,'Olanda':88,'Portogallo':94,'Turchia':203,'Belgio':144}
-EUROPA_33=['Italy','England','Spain','Germany','France','Netherlands','Portugal','Belgium','Turkey','Scotland','Austria','Switzerland','Denmark','Sweden','Norway','Poland','Czech Republic','Croatia','Serbia','Greece','Romania','Bulgaria','Hungary','Slovakia','Slovenia','Ireland','Wales','Finland','Iceland','Cyprus','Malta','Luxembourg','Belarus']
 TOP_LEAGUES={'Italy':135,'England':39,'Spain':140,'Germany':78,'France':61,'Netherlands':88,'Portugal':94,'Belgium':144,'Turkey':203,'Scotland':179,'Austria':218,'Switzerland':207,'Denmark':106,'Sweden':113,'Norway':103,'Poland':107,'Czech Republic':345,'Croatia':210,'Serbia':286,'Greece':197,'Romania':283,'Bulgaria':172,'Hungary':271,'Slovakia':332,'Slovenia':373,'Ireland':344,'Wales':110,'Finland':244,'Iceland':164,'Cyprus':318,'Malta':389,'Luxembourg':261,'Belarus':116}
+EUROPA_33=list(TOP_LEAGUES.keys())
+
+def is_youth_league(name):
+    n=name.lower()
+    bad=['u19','u21','u23','u17','women',' w ','female','youth','reserve','development','academy',' u18',' u20']
+    return any(x in n for x in bad)
+
 app=Flask(__name__)
 @app.route('/')
-def home():return f'BOT V28 DOPPIA CHANCE REALE - {datetime.now(ITALY).strftime("%H:%M")}',200
+def home():return f'BOT V31 PRE-MATCH - {datetime.now(ITALY).strftime("%H:%M")}',200
 TAST=json.dumps({"keyboard":[["Serie A","Serie B","Inghilterra"],["Spagna","Germania","Francia"],["Olanda","Portogallo","Turchia"],["DOPPIA ALTA %"],["BOLLA EUROPA 33 NAZIONI"],["MODELLO AMERICANO 33"],["STATUS"],["ACCENDI","SPEGNI"]],"resize_keyboard":True})
+
 def tg(m,cid=None,keys=False):
  try:
   cid=cid or CHAT
@@ -20,39 +27,50 @@ def tg(m,cid=None,keys=False):
   if keys:pay['reply_markup']=json.loads(TAST)
   requests.post(base+'/sendMessage',json=pay,timeout=25)
  except:pass
+
 def api(url):
  try:
   r=requests.get(url,headers={'x-apisports-key':KEY},timeout=30)
   if r.status_code==429:return 'LIMIT'
   return r.json().get('response',[])
  except:return []
+
 def get_double_chance(fid):
- # Prende quote reali e sceglie doppia chance con quota piu bassa = piu probabile
  try:
   data=api(f'https://v3.football.api-sports.io/odds?fixture={fid}')
   if not data or data=='LIMIT':return None
   for book in data[0].get('bookmakers',[])[:3]:
    for bet in book.get('bets',[]):
     if 'Double Chance' in bet['name']:
-     best=None
-     best_odd=10
+     best=None;best_odd=10
      for v in bet['values']:
       try:
        odd=float(v['odd'])
-       if odd<best_odd:
-        best_odd=odd
-        best=v['value']
+       if odd<best_odd:best_odd=odd;best=v['value']
       except:continue
      if best:
-      # Converte Home/Draw -> 1X, Draw/Away -> X2, Home/Away -> 12
       if 'Home/Draw' in best:return f"1X @ {best_odd}"
       if 'Draw/Away' in best:return f"X2 @ {best_odd}"
       if 'Home/Away' in best:return f"12 @ {best_odd}"
-      return f"{best} @ {best_odd}"
  except:pass
  return None
+
+def get_over_15(fid):
+ try:
+  data=api(f'https://v3.football.api-sports.io/odds?fixture={fid}')
+  if not data or data=='LIMIT':return None
+  for book in data[0].get('bookmakers',[])[:3]:
+   for bet in book.get('bets',[]):
+    if 'Goals Over/Under' in bet['name'] or 'Over/Under' in bet['name']:
+     for v in bet['values']:
+      if 'Over 1.5' in v['value']:
+       try:return float(v['odd'])
+       except:continue
+ except:pass
+ return None
+
 def media(league_id,name):
- txt=name.upper()+" - MEDIA\n"+datetime.now(ITALY).strftime("%d/%m %H:%M")+"\n\n"
+ txt=name.upper()+"\n"+datetime.now(ITALY).strftime("%d/%m %H:%M")+"\n\n"
  teams=api(f'https://v3.football.api-sports.io/teams?league={league_id}&season=2024')
  if not teams:return 'Errore API'
  for t in teams[:14]:
@@ -69,68 +87,69 @@ def media(league_id,name):
   txt+=("PIU DI 2" if med>2 else "MENO DI 2")+" - "+tname+": {:.2f}\n".format(med)
   time.sleep(0.4)
  return txt
+
 def get_fixtures_today():
  today=datetime.now(ROME).strftime('%Y-%m-%d')
  return api(f'https://v3.football.api-sports.io/fixtures?date={today}')
+
 def run_bolla(cid=None,auto=False):
  data=get_fixtures_today()
  if not data or data=='LIMIT':
-  if not auto:tg('BOLLA EUROPA: Limite API',cid,True)
+  if not auto:tg('BOLLA: Limite API',cid,True)
   return
- # Pulisci U19 / Women
- clean=[]
- for f in data:
-  ln=f['league']['name'].lower()
-  if 'u19' in ln or 'u21' in ln or 'u23' in ln or 'women' in ln or ' w ' in ln:continue
-  if f['league']['country'] not in EUROPA_33:continue
-  clean.append(f)
- sel=[];seen=set()
- tg_text="⏳ Calcolo doppia chance piu alta per 33 nazioni... ci metto 30 sec" if not auto else None
- if tg_text:tg(tg_text,cid,True)
- for country in EUROPA_33:
-  if country in seen:continue
-  top_id=TOP_LEAGUES.get(country)
-  # Trova partite di questa nazione oggi - prima cerca top league
-  candidates=[f for f in clean if f['league']['country']==country and f['league']['id']==top_id]
-  if not candidates:
-   candidates=[f for f in clean if f['league']['country']==country]
-  if not candidates:continue
-  # Prendi la prima partita della nazione
-  f=candidates[0]
-  fid=f['fixture']['id']
-  ora=f['fixture']['date'][11:16]
-  home=f['teams']['home']['name'];away=f['teams']['away']['name'];league=f['league']['name']
-  # CALCOLA DOPPIA CHANCE PIU ALTA
+ sel=[]
+ if not auto:tg('⏳ Cerco SOLO TOP LEAGUE + DOPPIA PIU ALTA... 30 sec',cid,True)
+ for country,top_id in TOP_LEAGUES.items():
+  found=None
+  for f in data:
+   if f['league']['id']==top_id and f['league']['country']==country:
+    if is_youth_league(f['league']['name']):continue
+    if f['fixture']['status']['short']!='NS':continue
+    found=f
+    break
+  if not found:continue
+  fid=found['fixture']['id'];ora=found['fixture']['date'][11:16];home=found['teams']['home']['name'];away=found['teams']['away']['name'];league=found['league']['name']
   dc=get_double_chance(fid)
-  if not dc:
-   # Se non ha quote, usa logica 1X di default (casa favorita)
-   dc="1X (no quote)"
-  else:
-   time.sleep(0.6) # per non superare limite API
+  if not dc:dc="1X (no quota)"
+  else:time.sleep(0.6)
   sel.append(f"{ora} {home} vs {away} -> {dc} ({league} - {country})")
-  seen.add(country)
   if len(sel)>=33:break
  if not sel:
-  if not auto:tg('BOLLA EUROPA 33: Oggi zero partite',cid,True)
+  if not auto:tg('Oggi nessuna TOP LEAGUE in programma (pre-match)',cid,True)
   return
- pref="🌍 BOLLA ORARIA - 33 NAZIONI DOPPIA CHANCE PIU ALTA\n" if auto else "🌍 BOLLA EUROPA 33 NAZIONI - DOPPIA CHANCE PIU ALTA\n"
- msg=pref+'\n'.join([f"{i+1}. {m}" for i,m in enumerate(sel[:33])])
- tg(msg,cid,True)
+ pref=f"🌍 BOLLA EUROPA {len(sel)} NAZIONI - SOLO TOP LEAGUE - DOPPIA PIU ALTA PRE-MATCH\n\n" if auto else f"🌍 BOLLA EUROPA {len(sel)} NAZIONI - SOLO TOP LEAGUE - DOPPIA PIU ALTA PRE-MATCH\n\n"
+ tg(pref+'\n'.join([f"{i+1}. {m}" for i,m in enumerate(sel)]),cid,True)
+
+def run_doppia(cid=None,auto=False):
+    data=get_fixtures_today()
+    if not data or data=='LIMIT':
+        if not auto:tg('DOPPIA: Limite API',cid,True)
+        return
+    out=[]
+    if not auto:tg('⏳ Cerco OVER 1.5 PIU SICURI PRE-MATCH... 30 sec',cid,True)
+    for f in data:
+        try:
+            if f['league']['country'] not in EUROPA_33:continue
+            if is_youth_league(f['league']['name']):continue
+            if f['fixture']['status']['short']!='NS':continue
+            if f['league']['id']!=TOP_LEAGUES.get(f['league']['country']):continue
+            fid=f['fixture']['id']
+            over_odd=get_over_15(fid)
+            if over_odd is None:continue
+            if over_odd>1.55:continue
+            ora=f['fixture']['date'][11:16];home=f['teams']['home']['name'];away=f['teams']['away']['name'];league=f['league']['name']
+            out.append(f"{ora} {home} vs {away} -> OVER 1.5 @ {over_odd} ({league})")
+            time.sleep(0.6)
+            if len(out)>=15:break
+        except:continue
+    if not out:
+        if not auto:tg('🔥 Oggi nessun OVER 1.5 <1.55 nelle TOP LEAGUE pre-match',cid,True)
+        return
+    pref=f"🔥 DOPPIA ALTA % - {len(out)} OVER 1.5 PIU SICURI PRE-MATCH\n\n" if not auto else f"🔥 DOPPIA AUTOMATICA - {len(out)} OVER 1.5 SICURI PRE-MATCH\n\n"
+    tg(pref+'\n'.join([f"{i+1}. {m}" for i,m in enumerate(out)]),cid,True)
+
 def run_americano(cid=None):run_bolla(cid,False)
-def run_doppia(cid=None):
- data=get_fixtures_today()
- out=[]
- for f in data:
-  try:
-   if f['league']['country'] not in EUROPA_33:continue
-   ln=f['league']['name'].lower()
-   if 'u19' in ln or 'women' in ln:continue
-   if f['fixture']['id'] in av_g:continue
-   h=f['goals']['home'];a=f['goals']['away']
-   if h is None or a is None:continue
-   if h+a>=2:out.append(f"{f['teams']['home']['name']}-{f['teams']['away']['name']} {h}-{a} ({f['league']['country']})")
-  except:continue
- tg('DOPPIA EUROPA: Nessun match' if not out else '🔥 DOPPIA EUROPA\n'+'\n'.join(out[:20]),cid,True)
+
 def poll():
  global is_paused,last_id
  try:
@@ -146,8 +165,8 @@ def poll():
      last_id=u['update_id'];msg=u.get('message',{});txt=(msg.get('text') or '').strip();low=txt.lower();cid=msg.get('chat',{}).get('id')
      if not txt:continue
      if 'spegni' in low:is_paused=True;tg('⏸️ PAUSA',cid,True)
-     elif 'accendi' in low or '/start' in low:is_paused=False;tg('▶️ V28 DOPPIA CHANCE ATTIVO',cid,True)
-     elif 'status' in low:tg('STATUS: LIVE MONDO + BOLLA 33 NAZIONI DOPPIA PIU ALTA',cid,True)
+     elif 'accendi' in low or '/start' in low:is_paused=False;tg('▶️ V31 PRE-MATCH ATTIVO',cid,True)
+     elif 'status' in low:tg('STATUS: V31 LIVE MONDO + BOLLA DOPPIA PIU ALTA + DOPPIA OVER 1.5 PRE-MATCH',cid,True)
      elif 'doppia' in low:run_doppia(cid)
      elif 'bolla' in low or 'americano' in low:run_bolla(cid)
      elif low in [k.lower() for k in LEAGUES.keys()]:
@@ -155,15 +174,20 @@ def poll():
        if k.lower()==low:tg(media(v,k),cid,True)
   except:pass
   time.sleep(2)
+
 def live_loop():
- global last_bolla_hour
- tg('✅ BOT V28 ATTIVO\n🌍 LIVE = MONDO\n🇪🇺 BOLLA 33 = 33 NAZIONI con DOPPIA CHANCE PIU ALTA (1X/X2/12)',keys=True)
+ global last_bolla_hour,last_doppia_hour
+ tg('✅ BOT V31 PRE-MATCH ATTIVO\n🌍 LIVE MONDO\n🇪🇺 BOLLA = TOP LEAGUE + DOPPIA PIU ALTA (1X/X2/12)\n🔥 DOPPIA = TOP LEAGUE + OVER 1.5 SICURO PRE-MATCH',keys=True)
  while True:
   try:
    if is_paused:time.sleep(30);continue
    now=datetime.now(ITALY)
    if 2<=now.hour<6:time.sleep(300);continue
-   if now.hour!=last_bolla_hour and now.minute<5:last_bolla_hour=now.hour;run_bolla(auto=True)
+   if now.hour!=last_bolla_hour and now.minute<10:
+       last_bolla_hour=now.hour
+       run_bolla(auto=True)
+       time.sleep(5)
+       run_doppia(auto=True)
    games=api('https://v3.football.api-sports.io/fixtures?live=all')
    if games=='LIMIT':time.sleep(3600);continue
    if not games:time.sleep(60);continue
@@ -196,6 +220,7 @@ def live_loop():
      if tot>av_g[fid]:tg(f"✅ GOAL VINTO! {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}");del av_g[fid]
    time.sleep(60)
   except Exception as e:print(e);time.sleep(15)
+
 threading.Thread(target=poll,daemon=True).start()
 threading.Thread(target=live_loop,daemon=True).start()
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)))
