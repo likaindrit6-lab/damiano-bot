@@ -1,74 +1,98 @@
 import os,time,requests,threading,json
 from flask import Flask
 from datetime import datetime,timezone,timedelta
-
-BOT_TOKEN=os.getenv("BOT_TOKEN")
-CHAT_ID=os.getenv("CHAT_ID")
-API_FOOTBALL_KEY=os.getenv("API_FOOTBALL_KEY")
+BOT=os.getenv('BOT_TOKEN');CHAT=os.getenv('CHAT_ID');KEY=os.getenv('API_FOOTBALL_KEY')
 ITALY=timezone(timedelta(hours=2))
-
-is_paused=False
-last_update_id=0
-av_g={};av_s=set();pre=set();pre1=set();cache={};tripla_coda=[];ultimo_invio_tripla=time.time()
-
-LEAGUES={"Serie A":135,"Serie B":136,"Serie C":138,"Inghilterra":39,"Spagna":140,"Olanda":88,"Portogallo":94,"Belgio":144,"Francia":61,"Austria":218,"Danimarca":119,"Svizzera":207}
-
+is_paused=False;last_id=0;av_g={};av_s=set();pre=set();pre1=set();cache={}
+LEAGUES={'Serie A':135,'Serie B':136,'Inghilterra':39,'Spagna':140,'Olanda':88,'Portogallo':94,'Belgio':144,'Francia':61}
 app=Flask(__name__)
 @app.route('/')
-def home():
-    s="PAUSA" if is_paused else "ATTIVO"
-    return f"BOT OK - {s} - {datetime.now(ITALY).strftime('%H:%M')}",200
-
-TASTIERA_JSON=json.dumps({"keyboard":[["Serie A","Serie B","Serie C"],["Inghilterra","Spagna","Olanda"],["Portogallo","Belgio","Francia"],["Austria","Danimarca","Svizzera"],["TUTTA EUROPA","BOLLA EUROPA"],["ACCENDI","SPEGNI","STATUS"]],"resize_keyboard":True,"is_persistent":True})
-
-def tg(m,chat_id=None,con_tastiera=False):
-    try:
-        cid=chat_id if chat_id else CHAT_ID
-        if not BOT_TOKEN or not cid: return
-        base=f"https://api.telegram.org/bot{BOT_TOKEN}"
-        payload={"chat_id":cid,"text":m,"parse_mode":"HTML","disable_web_page_preview":True}
-        if con_tastiera: payload["reply_markup"]=TASTIERA_JSON
-        requests.post(base+"/sendMessage",json=payload,timeout=25)
-    except: pass
-
-def api_get(url):
-    try:
-        r=requests.get(url,headers={"x-apisports-key":API_FOOTBALL_KEY},timeout=30)
-        if r.status_code==429: return "LIMIT"
-        return r.json().get("response",[])
-    except: return []
-
-def media_gol_lega(league_id, nome_lega):
-    try:
-        txt=f"{nome_lega.upper()} - MEDIA GOL ULTIME 10\n{datetime.now(ITALY).strftime('%d/%m %H:%M')}\n\n"
-        teams_resp=api_get(f"https://v3.football.api-sports.io/teams?league={league_id}&season=2024")
-        if not teams_resp or teams_resp=="LIMIT": return f"Errore API {nome_lega}"
-        for t in teams_resp[:16]:
-            team_id=t['team']['id']; team_name=t['team']['name']
-            last=api_get(f"https://v3.football.api-sports.io/fixtures?team={team_id}&last=10&season=2024")
-            if not last or last=="LIMIT": time.sleep(0.5); continue
-            tot=0;c=0
-            for p in last:
-                gh=p['goals']['home']; ga=p['goals']['away']
-                if gh is None: continue
-                tot+=gh+ga; c+=1
-            if c==0: continue
-            media=tot/c
-            icon="HOT" if media>2.5 else "LOW"
-            txt+=f"{icon} {team_name} Media:{media:.2f}\n"
-            time.sleep(0.35)
-        return txt
-    except Exception as e: return f"Errore {nome_lega}: {e}"
-
-def crea_bolla():
-    try:
-        picks=[]; quota=1.0
-        for gg in range(2):
-            if len(picks)>=20: break
-            giorno=(datetime.now(ITALY)+timedelta(days=gg)).strftime("%Y-%m-%d")
-            fixtures=api_get(f"https://v3.football.api-sports.io/fixtures?date={giorno}")
-            if not fixtures: continue
-            for p in fixtures:
-                if len(picks)>=20: break
-                if p['league']['id'] not in LEAGUES.values(): continue
-                fid=p["fixture
+def home():return f'BOT OK',200
+TAST=json.dumps({'keyboard':[['Serie A','Serie B'],['Inghilterra','Spagna'],['Olanda','Portogallo'],['Francia','Belgio'],['ACCENDI','SPEGNI']],'resize_keyboard':True})
+def tg(m,cid=None,keys=False):
+ try:
+  cid=cid or CHAT;base=f'https://api.telegram.org/bot{BOT}';pay={'chat_id':cid,'text':m,'parse_mode':'HTML'}
+  if keys:pay['reply_markup']=TAST
+  requests.post(base+'/sendMessage',json=pay,timeout=20)
+ except:pass
+def api(url):
+ try:
+  r=requests.get(url,headers={'x-apisports-key':KEY},timeout=30)
+  if r.status_code==429:return 'LIMIT'
+  return r.json().get('response',[])
+ except:return []
+def media(league_id,name):
+ txt=f'{name} MEDIA ULTIME 10\n\n'
+ teams=api(f'https://v3.football.api-sports.io/teams?league={league_id}&season=2024')
+ if not teams:return 'Errore API'
+ for t in teams[:12]:
+  tid=t['team']['id'];tname=t['team']['name']
+  last=api(f'https://v3.football.api-sports.io/fixtures?team={tid}&last=10&season=2024')
+  if not last:continue
+  tot=0;c=0
+  for p in last:
+   gh=p['goals']['home'];ga=p['goals']['away']
+   if gh is None:continue
+   tot+=gh+ga;c+=1
+  if c==0:continue
+  med=tot/c;txt+=f"{tname}: {med:.2f}\n"
+  time.sleep(0.4)
+ return txt
+def poll():
+ global is_paused,last_id
+ try:
+  if BOT:requests.get(f'https://api.telegram.org/bot{BOT}/deleteWebhook?drop_pending_updates=true',timeout=10)
+ except:pass
+ while True:
+  try:
+   if not BOT:time.sleep(60);continue
+   base=f'https://api.telegram.org/bot{BOT}';url=base+f'/getUpdates?offset={last_id+1}&timeout=20'
+   r=requests.get(url,timeout=30).json()
+   if r.get('ok'):
+    for u in r.get('result',[]):
+     last_id=u['update_id'];txt=u.get('message',{}).get('text','').lower();cid=u.get('message',{}).get('chat',{}).get('id')
+     if 'spegni' in txt:is_paused=True;tg('PAUSA',cid,True)
+     elif 'accendi' in txt or '/start' in txt:is_paused=False;tg('RIPRESO',cid,True)
+     elif txt in [k.lower() for k in LEAGUES.keys()]:
+      for k,v in LEAGUES.items():
+       if k.lower()==txt:tg(f'Calcolo {k}...',cid);tg(media(v,k),cid,True)
+  except:pass
+  time.sleep(2)
+def live():
+ tg('BOT FIX LIVE OK',con_tastiera=True) if False else tg('BOT FIX LIVE OK')
+ while True:
+  try:
+   if is_paused:time.sleep(30);continue
+   now=datetime.now(ITALY)
+   if 2<=now.hour<6:time.sleep(300);continue
+   games=api('https://v3.football.api-sports.io/fixtures?live=all')
+   if games=='LIMIT':time.sleep(3600);continue
+   if not games:time.sleep(60);continue
+   games=[g for g in games if g['league']['id'] in LEAGUES.values()]
+   for g in games:
+    fid=g['fixture']['id'];m=g['fixture']['status']['elapsed']
+    if m is None:continue
+    home=g['teams']['home']['name'];away=g['teams']['away']['name'];gh=g['goals']['home'];ga=g['goals']['away']
+    if 65<=m<=90 and fid not in av_s:
+     # tiri
+     st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}')
+     sot=0
+     if st and len(st)>=2:
+      for s in st:
+       for x in s['statistics']:
+        if x['type']=='Shots on Goal':
+         try:sot+=int(str(x['value']).replace('%','') or 0)
+         except:pass
+     if sot>=4:
+      tg(f"GIOCALO {m}' {g['league']['country']} {home} {gh}-{ga} {away} Tiri:{sot}");av_s.add(fid);av_g[fid]=gh+ga
+   for g in games:
+    fid=g['fixture']['id']
+    if fid in av_g:
+     tot=g['goals']['home']+g['goals']['away']
+     if tot>av_g[fid]:tg(f"GOAL VINTO! {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}");del av_g[fid]
+   time.sleep(60)
+  except Exception as e:print(e);time.sleep(15)
+threading.Thread(target=poll,daemon=True).start()
+threading.Thread(target=live,daemon=True).start()
+if __name__=='__main__':
+ app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)))
