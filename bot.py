@@ -7,39 +7,23 @@ is_paused=False;last_id=0;av_g={};av_s=set();pre=set();pre1=set();cache={}
 LEAGUES={'Serie A':135,'Serie B':136,'Serie C':138,'Inghilterra':39,'Championship':40,'Spagna':140,'Spagna 2':142,'Germania':78,'Germania 2':79,'Francia':61,'Francia 2':62,'Olanda':88,'Portogallo':94,'Belgio':144,'Scozia':179,'Austria':218,'Svizzera':207,'Danimarca':119,'Svezia':113,'Norvegia':103,'Turchia':203,'Grecia':197,'Polonia':106,'Cechia':345,'Croazia':210,'Serbia':286,'Romania':283,'Ungheria':271,'Ucraina':333,'Russia':235,'Cipro':318,'Bulgaria':172,'Irlanda':344}
 app=Flask(__name__)
 @app.route('/')
-def home():return f'BOT V20 DOPPIA OK - {datetime.now(ITALY).strftime("%H:%M")}',200
-
-TAST=json.dumps({
-"keyboard":[
-["Serie A","Serie B","Inghilterra"],
-["Spagna","Germania","Francia"],
-["Olanda","Portogallo","Belgio"],
-["Turchia","Austria","Svizzera"],
-["DOPPIA ALTA %"],
-["BOLLA EUROPA 33 NAZIONI"],
-["BOLLA 20","STATUS"],
-["ACCENDI","SPEGNI"]
-],
-"resize_keyboard":True,"is_persistent":True
-})
-
+def home():return f'BOT V21 DOPPIA REALE - {datetime.now(ITALY).strftime("%H:%M")}',200
+TAST=json.dumps({"keyboard":[["Serie A","Serie B","Inghilterra"],["Spagna","Germania","Francia"],["Olanda","Portogallo","Turchia"],["DOPPIA ALTA %"],["BOLLA EUROPA 33 NAZIONI"],["BOLLA 20","STATUS"],["ACCENDI","SPEGNI"]],"resize_keyboard":True,"is_persistent":True})
 def tg(m,cid=None,keys=False):
  try:
   cid=cid or CHAT;base=f'https://api.telegram.org/bot{BOT}';pay={'chat_id':cid,'text':m,'parse_mode':'HTML'}
   if keys:pay['reply_markup']=TAST
   requests.post(base+'/sendMessage',json=pay,timeout=25)
  except:pass
-
 def api(url):
  try:
   r=requests.get(url,headers={'x-apisports-key':KEY},timeout=30)
   if r.status_code==429:return 'LIMIT'
   return r.json().get('response',[])
  except:return []
-
-def media(league_id,name):
+def media(lid,name):
  txt=f'{name.upper()} - MEDIA ULTIME 10\n{datetime.now(ITALY).strftime("%d/%m %H:%M")}\n\n'
- teams=api(f'https://v3.football.api-sports.io/teams?league={league_id}&season=2024')
+ teams=api(f'https://v3.football.api-sports.io/teams?league={lid}&season=2024')
  if not teams:return 'Errore API'
  for t in teams[:14]:
   tid=t['team']['id'];tname=t['team']['name']
@@ -52,116 +36,101 @@ def media(league_id,name):
    tot+=gh+ga;c+=1
   if c==0:continue
   med=tot/c
-  if med>2: etichetta="PIU' DI 2"
-  else: etichetta="MENO DI 2"
-  txt+=f"{etichetta} - {tname}: {med:.2f}\n"
-  time.sleep(0.4)
+  et="PIU' DI 2" if med>2 else "MENO DI 2"
+  txt+=f"{et} - {tname}: {med:.2f}\n";time.sleep(0.4)
  return txt
 
 def crea_doppia():
  try:
-  txt=f"DOPPIA ALTA % - SETTIMANA EUROPA 33 NAZIONI\n{datetime.now(ITALY).strftime('%d/%m')}\n\n"
-  risultati=[]
+  txt=f"DOPPIA ALTA % - TUTTE LE 33 NAZIONI SETTIMANA\n{datetime.now(ITALY).strftime('%d/%m')}\n\n"
+  ris=[]
   BAN=["U19","U20","U21","U23","Youth","Reserve","Women","Friendly"]
-  for gg in range(7): # 7 giorni = questa settimana
+  for gg in range(7):
    giorno=(datetime.now(ITALY)+timedelta(days=gg)).strftime("%Y-%m-%d")
    fixtures=api(f"https://v3.football.api-sports.io/fixtures?date={giorno}")
-   if not fixtures or fixtures=='LIMIT': continue
+   if not fixtures or fixtures=='LIMIT':continue
    for p in fixtures:
-    if p['league']['id'] not in LEAGUES.values(): continue
-    if any(b.lower() in p["league"]["name"].lower() for b in BAN): continue
+    if p['league']['id'] not in LEAGUES.values():continue
+    if any(b.lower() in p["league"]["name"].lower() for b in BAN):continue
     fid=p["fixture"]["id"]
     dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
-    if dt < datetime.now(ITALY): continue
-    # prendiamo solo 15 partite per non bruciare API
-    if len(risultati)>=15: break
-    home_id=p['teams']['home']['id'];away_id=p['teams']['away']['id']
+    if dt < datetime.now(ITALY):continue
+    if len(ris)>=25:break
+    hid=p['teams']['home']['id'];aid=p['teams']['away']['id']
     home=p['teams']['home']['name'];away=p['teams']['away']['name']
-    # ultime 10 per stat doppia
-    h_last=api(f"https://v3.football.api-sports.io/fixtures?team={home_id}&last=10&season=2024")
-    time.sleep(0.4)
-    a_last=api(f"https://v3.football.api-sports.io/fixtures?team={away_id}&last=10&season=2024")
-    time.sleep(0.4)
-    if not h_last or not a_last: continue
-    h_win=h_draw=h_lost=0
+    h_last=api(f"https://v3.football.api-sports.io/fixtures?team={hid}&last=10&season=2024");time.sleep(0.35)
+    a_last=api(f"https://v3.football.api-sports.io/fixtures?team={aid}&last=10&season=2024");time.sleep(0.35)
+    if not h_last or not a_last:continue
+    hw=hd=hl=0
     for m in h_last:
-     if m['teams']['home']['id']==home_id:
-      if m['teams']['home']['winner']==True: h_win+=1
-      elif m['teams']['home']['winner']==False and m['teams']['away']['winner']==False: h_draw+=1
-      else: h_lost+=1
-     else:
-      if m['teams']['away']['winner']==True: h_win+=1
-      elif m['teams']['home']['winner']==False and m['teams']['away']['winner']==False: h_draw+=1
-      else: h_lost+=1
-    a_win=a_draw=a_lost=0
+     if m['goals']['home'] is None:continue
+     is_home=m['teams']['home']['id']==hid
+     w=m['teams']['home']['winner'] if is_home else m['teams']['away']['winner']
+     d=m['teams']['home']['winner']==False and m['teams']['away']['winner']==False
+     if w==True:hw+=1
+     elif d:hd+=1
+     else:hl+=1
+    aw=ad=al=0
     for m in a_last:
-     if m['teams']['home']['id']==away_id:
-      if m['teams']['home']['winner']==True: a_win+=1
-      elif m['teams']['home']['winner']==False and m['teams']['away']['winner']==False: a_draw+=1
-      else: a_lost+=1
-     else:
-      if m['teams']['away']['winner']==True: a_win+=1
-      elif m['teams']['home']['winner']==False and m['teams']['away']['winner']==False: a_draw+=1
-      else: a_lost+=1
-    # Calcolo doppia con % piu alta
-    # 1X = casa non perde
-    p1x = ((h_win+h_draw)/10*100 + (10-a_win)/10*100)/2
-    px2 = ((a_win+a_draw)/10*100 + (10-h_win)/10*100)/2
-    p12 = ((h_win+a_win + (10-h_draw-a_draw)/2)/10*100) # no pareggio
-
-    if p1x>=px2 and p1x>=p12:
-     doppia=f"1X @ {p1x:.0f}%"; perc=p1x
-    elif px2>=p1x and px2>=p12:
-     doppia=f"X2 @ {px2:.0f}%"; perc=px2
-    else:
-     doppia=f"12 @ {p12:.0f}%"; perc=p12
-
-    if perc>=65: # solo quelle alte
-     risultati.append((perc,f"{dt.strftime('%d/%m %H:%M')} - {p['league']['country']} {home} vs {away}\n-> {doppia}"))
-
-  risultati=sorted(risultati,key=lambda x:x[0],reverse=True)
-  if not risultati: return "Nessuna doppia alta % trovata questa settimana (API limit?)"
-  for perc,riga in risultati:
-   txt+=riga+f"\n\n"
-  return txt[:3800] # limite telegram
+     if m['goals']['home'] is None:continue
+     is_home=m['teams']['home']['id']==aid
+     w=m['teams']['home']['winner'] if is_home else m['teams']['away']['winner']
+     d=m['teams']['home']['winner']==False and m['teams']['away']['winner']==False
+     if w==True:aw+=1
+     elif d:ad+=1
+     else:al+=1
+    # Calcolo doppia reale - MAX 100%
+    p1x = (hw+hd)*10 # % casa non perde
+    px2 = (aw+ad)*10 # % ospite non perde
+    p12 = 100 - ((hd+ad)/2*10) # % non pareggio
+    # aggiusta con incrocio
+    p1x = round((p1x + (100-aw*10))/2)
+    px2 = round((px2 + (100-hw*10))/2)
+    if p1x>=px2 and p1x>=p12: best=f"1X {p1x}%"; perc=p1x
+    elif px2>=p1x and px2>=p12: best=f"X2 {px2}%"; perc=px2
+    else: best=f"12 {p12:.0f}%"; perc=p12
+    if perc>=60:
+     ris.append((perc,f"{dt.strftime('%d/%m %H:%M')} {p['league']['country']} {home} vs {away} -> {best}"))
+  ris=sorted(ris,key=lambda x:x[0],reverse=True)
+  if not ris:return "Nessuna partita trovata"
+  for _,r in ris: txt+=r+"\n\n"
+  return txt[:3900]
  except Exception as e: return f"Errore doppia: {e}"
 
 def crea_bolla():
  try:
-  picks=[];quota=1.0
-  BAN=["U19","U20","U21","U23","Youth","Reserve","Women","Friendly"]
+  picks=[];quota=1.0;BAN=["U19","U20","U21","U23","Youth","Reserve","Women","Friendly"]
   for gg in range(3):
-   if len(picks)>=20: break
+   if len(picks)>=20:break
    giorno=(datetime.now(ITALY)+timedelta(days=gg)).strftime("%Y-%m-%d")
    fixtures=api(f"https://v3.football.api-sports.io/fixtures?date={giorno}")
-   if not fixtures: continue
+   if not fixtures:continue
    fixtures=sorted(fixtures,key=lambda x:x["fixture"]["timestamp"])
    for p in fixtures:
-    if len(picks)>=20: break
-    if p['league']['id'] not in LEAGUES.values(): continue
-    if any(b.lower() in p["league"]["name"].lower() for b in BAN): continue
-    fid=p["fixture"]["id"]
-    dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
-    if dt < datetime.now(ITALY): continue
+    if len(picks)>=20:break
+    if p['league']['id'] not in LEAGUES.values():continue
+    if any(b.lower() in p["league"]["name"].lower() for b in BAN):continue
+    fid=p["fixture"]["id"];dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
+    if dt < datetime.now(ITALY):continue
     home=p['teams']['home']['name'];away=p['teams']['away']['name'];paese=p['league']['country'];lega=p['league']['name'];orario=dt.strftime("%H:%M")
     odds=api(f"https://v3.football.api-sports.io/odds?fixture={fid}")
-    if not odds or odds=="LIMIT": continue
-    if not odds[0].get("bookmakers"): continue
+    if not odds or odds=="LIMIT":continue
+    if not odds[0].get("bookmakers"):continue
     try:
      over=None
      for bet in odds[0]["bookmakers"][0]["bets"]:
-      if "Over/Under" not in bet["name"]: continue
+      if "Over/Under" not in bet["name"]:continue
       for v in bet["values"]:
        if "Over 0.5" in v["value"]:
         q=float(v["odd"])
-        if 1.01 <= q <= 1.35: over=q; break
-      if over: break
-     if not over: continue
+        if 1.01 <= q <= 1.35: over=q;break
+      if over:break
+     if not over:continue
      quota=round(quota*over,2)
      picks.append(f"{orario} {giorno[5:10]} - {paese} - {lega}\n{home} vs {away}\nOver 0.5 @ {over}")
-    except: continue
-  if len(picks)<5: return f"Poche partite nelle 33 nazioni, trovate {len(picks)}"
-  return f"BOLLA EUROPA 33 NAZIONI - Turchia inclusa\n{len(picks)} partite - Quota {quota:.2f}\n\n"+"\n\n".join(picks)+f"\n\nTOT {quota:.2f}"
+    except:continue
+  if len(picks)<5:return f"Poche partite, trovate {len(picks)}"
+  return f"BOLLA EUROPA 33 NAZIONI - Quota {quota:.2f}\n\n"+"\n\n".join(picks)+f"\n\nTOT {quota:.2f}"
  except Exception as e: return f"Errore bolla: {e}"
 
 def poll():
@@ -178,10 +147,10 @@ def poll():
     for u in r.get('result',[]):
      last_id=u['update_id'];txt_raw=u.get('message',{}).get('text','');txt=txt_raw.lower().strip();cid=u.get('message',{}).get('chat',{}).get('id')
      if 'spegni' in txt:is_paused=True;tg('PAUSA',cid,True)
-     elif 'accendi' in txt or '/start' in txt:is_paused=False;tg('RIPRESO - DOPPIA ATTIVA',cid,True)
-     elif 'status' in txt:tg(f"STATUS {'PAUSA' if is_paused else 'ATTIVO'} | Leghe: {len(LEAGUES)}",cid,True)
-     elif 'doppia' in txt:tg('Calcolo DOPPIA ALTA % settimana... 60 sec, brucia API...',cid);tg(crea_doppia(),cid,True)
-     elif 'bolla' in txt:tg('Creo BOLLA EUROPA 33 NAZIONI...',cid);tg(crea_bolla(),cid,True)
+     elif 'accendi' in txt or '/start' in txt:is_paused=False;tg('RIPRESO - DOPPIA REALE ATTIVA',cid,True)
+     elif 'status' in txt:tg(f"STATUS {'PAUSA' if is_paused else 'ATTIVO'}",cid,True)
+     elif 'doppia' in txt:tg('Calcolo TUTTE le partite 33 nazioni... 90 sec',cid);tg(crea_doppia(),cid,True)
+     elif 'bolla' in txt:tg('Creo BOLLA 33 NAZIONI...',cid);tg(crea_bolla(),cid,True)
      elif txt in [k.lower() for k in LEAGUES.keys()]:
       for k,v in LEAGUES.items():
        if k.lower()==txt:tg(f'Calcolo {k}...',cid);tg(media(v,k),cid,True);break
@@ -196,7 +165,7 @@ def get_stat(a,n):
  return 0
 
 def live():
- tg('BOT V20 DOPPIA ALTA % + LIVE ATTIVO',keys=True)
+ tg('BOT V21 DOPPIA REALE 33 NAZIONI ATTIVO',keys=True)
  while True:
   try:
    if is_paused:time.sleep(30);continue
@@ -242,5 +211,4 @@ def live():
 
 threading.Thread(target=poll,daemon=True).start()
 threading.Thread(target=live,daemon=True).start()
-if __name__=='__main__':
- app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)))
+if __name__=='__main__': app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)))
