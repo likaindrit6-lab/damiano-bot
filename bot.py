@@ -35,7 +35,7 @@ def is_youth_league(name):
 app=Flask(__name__)
 @app.route('/')
 def home():
-    return f'BOT V33.17 FINALE - {datetime.now(ITALY).strftime("%H:%M")}',200
+    return f'BOT V33.18 FINALE - {datetime.now(ITALY).strftime("%H:%M")}',200
 
 TAST_MAIN=json.dumps({"inline_keyboard":[
     [{"text":"📋 CAMPIONATI - 33 NAZIONI","callback_data":"open_leagues"}],
@@ -459,7 +459,7 @@ def poll():
                             p=int(data.split('_')[1])
                             tg_edit(mid,cid,f"📋 PAGINA {p}:",build_leagues_keyboard(p))
                         elif data=='back_main':
-                            tg_edit(mid,cid,"✅ BOT V33.17 FINALE",TAST_MAIN)
+                            tg_edit(mid,cid,"✅ BOT V33.18 FINALE",TAST_MAIN)
                         elif data.startswith('league_'):
                             country=data.replace('league_','')
                             lid=TOP_LEAGUES.get(country)
@@ -480,9 +480,9 @@ def poll():
                             tg('⏸️ PAUSA',cid)
                         elif 'accendi' in data:
                             is_paused=False
-                            tg('▶️ V33.17 ATTIVO',cid,inline=TAST_MAIN)
+                            tg('▶️ V33.18 ATTIVO',cid,inline=TAST_MAIN)
                         elif 'status' in data:
-                            tg('STATUS V33.17 FINALE OK - LIVE OGNI ORA @3+',cid)
+                            tg('STATUS V33.18 FINALE OK - LIVE OGNI ORA @3+',cid)
                         continue
                     msg=u.get('message',{})
                     txt=(msg.get('text') or '').strip()
@@ -490,11 +490,14 @@ def poll():
                     cid=msg.get('chat',{}).get('id')
                     if not txt:
                         continue
+                    if '/live' in low:
+                        run_high_live_manual(cid)
+                        continue
                     if '/start' in low:
                         is_paused=False
                         tg('Pulisco vecchia tastiera...',cid,remove=True)
                         time.sleep(1)
-                        tg('✅ BOT V33.17 FINALE - LIVE OGNI ORA @3+ 90%\n✅ 3 TIRI primo tempo\n✅ 5 TIRI prima 70\n📋 Clicca sotto',cid,inline=TAST_MAIN)
+                        tg('✅ BOT V33.18 FINALE - LIVE OGNI ORA @3+ 90%\n✅ 3 TIRI primo tempo\n✅ 5 TIRI prima 70\n📋 Clicca sotto',cid,inline=TAST_MAIN)
         except:
             pass
         time.sleep(1)
@@ -503,7 +506,7 @@ def live_loop():
     global last_bolla_hour,sot_sent,gol_tracker,gol_fatto,av_s_first,high_sent
     tg('Pulisco...',remove=True)
     time.sleep(1)
-    tg('✅ BOT V33.17 FINALE ATTIVO - LIVE OGNI ORA @3+ 90%',inline=TAST_MAIN)
+    tg('✅ BOT V33.18 FINALE ATTIVO - LIVE OGNI ORA @3+ 90%',inline=TAST_MAIN)
     while True:
         try:
             if is_paused:
