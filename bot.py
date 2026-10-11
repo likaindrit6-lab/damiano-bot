@@ -11,18 +11,24 @@ sot_sent=set()
 gol_tracker={}
 gol_fatto=set()
 pt_sent=set()
+sot_cache={}
+TOP33=['Premier League','La Liga','Serie A','Bundesliga','Ligue 1','Eredivisie','Primeira Liga','Championship','Serie B','LaLiga2','2. Bundesliga','Ligue 2','Super Lig','Jupiler Pro League','Premiership','Super League','Superliga','Eliteserien','Allsvenskan','Ekstraklasa','Liga 1','Champions League','Europa League','Conference League','Libertadores','Brasileiro','Liga Profesional','Liga MX','MLS','Saudi Pro League']
+
 def youth(n):
  if not n: return False
  x=n.lower()
- for k in ['u19','u21','u23','u17','women',' w','female','youth']:
+ for k in ['u19','u21','u23','u17','women',' w','female','youth','reserve']:
   if k in x: return True
- return False
+ return x.strip().endswith(' w')
+
 app=Flask(__name__)
 @app.route('/')
 def home():
- return "BOT V33.43 FIX OK",200
+ return "BOT V33.45 FIX 93 LIVE OK",200
+
 K1=json.dumps({"keyboard":[[{"text":"MENU"}]],"resize_keyboard":True,"is_persistent":True})
 K2=json.dumps({"keyboard":[[{"text":"CAMPIONATI"}],[{"text":"CORNER"},{"text":"LIVE @3+"}],[{"text":"DOPPIA"},{"text":"BOLLA 33"}],[{"text":"ESATTI"}],[{"text":"STATUS"},{"text":"TEST LIVE"}],[{"text":"SPEGNI"},{"text":"ACCENDI"}],[{"text":"CHIUDI"}]],"resize_keyboard":True,"is_persistent":True})
+
 def tg(m,cid=None,reply=None):
  try:
   cid=cid or CHAT
@@ -31,26 +37,35 @@ def tg(m,cid=None,reply=None):
   if reply: data['reply_markup']=json.loads(reply) if isinstance(reply,str) else reply
   requests.post(url,json=data,timeout=25)
  except: pass
+
 def api_call(ep):
  try:
-  base='https://v3.football.api-sports.io/'
-  r=requests.get(base+ep,headers={'x-apisports-key':KEY},timeout=30)
+  r=requests.get('https://v3.football.api-sports.io/'+ep,headers={'x-apisports-key':KEY},timeout=30)
   if r.status_code==429: return 'LIMIT'
   return r.json().get('response',[])
  except: return []
-def get_sot(fid):
+
+def get_sot_cached(fid):
  try:
+  now=time.time()
+  if fid in sot_cache:
+   ts,val=sot_cache[fid]
+   if now-ts<180: return val
   st=api_call('fixtures/statistics?fixture='+str(fid))
-  if not st or st=='LIMIT' or len(st)<2: return 0
+  if st=='LIMIT': return -1
+  if not st: return 0
   sot=0
   for s in st:
    for x in s['statistics']:
     if x['type']=='Shots on Goal':
      v=x['value']
      if v is None: continue
-     sot+=int(str(v))
+     try: sot+=int(str(v))
+     except: pass
+  sot_cache[fid]=(now,sot)
   return sot
  except: return 0
+
 def poll():
  global is_paused,last_id
  try: requests.get('https://api.telegram.org/bot'+BOT+'/deleteWebhook?drop_pending_updates=true',timeout=10)
@@ -68,7 +83,7 @@ def poll():
      if not txt: continue
      up=txt.upper()
      if 'MENU' in up and 'CHIUDI' not in up:
-      tg('MENU V33.43:',cid,reply=K2)
+      tg('MENU V33.45:',cid,reply=K2)
       continue
      if 'CHIUDI' in up:
       tg('Chiuso',cid,reply=K1)
@@ -76,7 +91,7 @@ def poll():
      if 'STATUS' in up:
       games=api_call('fixtures?live=all')
       cnt=len(games) if games!='LIMIT' and games else 0
-      tg('Live:'+str(cnt),cid,reply=K1)
+      tg('Live:'+str(cnt)+' Cache:'+str(len(sot_cache))+' PT:'+str(len(pt_sent))+' G:'+str(len(sot_sent)),cid,reply=K1)
       continue
      if 'TEST' in up:
       games=api_call('fixtures?live=all')
@@ -92,8 +107,10 @@ def poll():
       continue
   except: pass
   time.sleep(1)
+
 def live_loop():
- tg('V33.43 FIX GA ATTIVO',reply=K1)
+ tg('V33.45 FIX 93 LIVE ATTIVO',reply=K1)
+ idx=0
  while True:
   try:
    if is_paused:
@@ -101,37 +118,48 @@ def live_loop():
     continue
    games=api_call('fixtures?live=all')
    if games=='LIMIT':
-    time.sleep(3600)
+    time.sleep(120)
     continue
    if not games:
     time.sleep(60)
     continue
-   for g in games:
+   total=len(games)
+   if idx>=total: idx=0
+   batch=games[idx:idx+12]
+   idx+=12
+   for g in batch:
     try:
      if youth(g['league']['name']): continue
      fid=g['fixture']['id']
      m=g['fixture']['status']['elapsed']
-     if m is None or m>85 or m<5: continue
+     if m is None or m>88 or m<10: continue
      h=g['teams']['home']['name']
      a=g['teams']['away']['name']
      gh=g['goals']['home'] or 0
      ga=g['goals']['away'] or 0
      tot=gh+ga
-     sot=get_sot(fid)
-     if sot==0 or tot>sot: continue
-     if fid not in pt_sent and m<=50 and sot>=3:
+     sot=get_sot_cached(fid)
+     if sot==-1:
+      time.sleep(2)
+      continue
+     if sot==0:
+      time.sleep(1.1)
+      continue
+     if fid not in pt_sent and m<=55 and sot>=3:
       tg('PRIMO TEMPO '+h+' '+str(gh)+'-'+str(ga)+' '+a+' '+str(sot)+' TIRI '+str(m)+'m',reply=K1)
       pt_sent.add(fid)
      if fid not in sot_sent and sot>=5:
-      tg('GIOCALO! '+h+' '+str(gh)+'-'+str(ga)+' '+a+' '+str(sot)+' TIRI '+str(m)+'m',reply=K1)
+      tg('GIOCALO! '+h+' '+str(gh)+'-'+str(ga)+' '+a+' '+str(sot)+' TIRI '+str(m)+'m '+g['league']['name'],reply=K1)
       sot_sent.add(fid)
       gol_tracker[fid]=tot
      if fid in sot_sent and fid not in gol_fatto and tot>gol_tracker.get(fid,0):
       tg('GOAL! '+h+' '+str(gh)+'-'+str(ga)+' '+a,reply=K1)
       gol_fatto.add(fid)
+     time.sleep(1.2)
     except: continue
-   time.sleep(60)
+   time.sleep(15)
   except: time.sleep(15)
+
 threading.Thread(target=poll,daemon=True).start()
 threading.Thread(target=live_loop,daemon=True).start()
 if __name__=='__main__':
