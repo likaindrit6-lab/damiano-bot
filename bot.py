@@ -1,70 +1,59 @@
 import os,time,requests,threading,json
 from flask import Flask
-from datetime import datetime,timezone,timedelta
 BOT=os.getenv('BOT_TOKEN')
 CHAT=os.getenv('CHAT_ID')
 KEY=os.getenv('API_FOOTBALL_KEY')
-ITALY=timezone(timedelta(hours=2))
 is_paused=False
 last_id=0
-sot_sent=set()
-gol_tracker={}
-gol_fatto=set()
-pt_sent=set()
-sot_cache={}
-TOP33=['Premier League','La Liga','Serie A','Bundesliga','Ligue 1','Eredivisie','Primeira Liga','Championship','Serie B','LaLiga2','2. Bundesliga','Ligue 2','Super Lig','Jupiler Pro League','Premiership','Super League','Superliga','Eliteserien','Allsvenskan','Ekstraklasa','Liga 1','Champions League','Europa League','Conference League','Libertadores','Brasileiro','Liga Profesional','Liga MX','MLS','Saudi Pro League']
+pre=set()
+gio=set()
+cache={}
 
 def youth(n):
  if not n: return False
  x=n.lower()
- for k in ['u19','u21','u23','u17','women',' w','female','youth','reserve']:
+ for k in ['u19','u21','u23','women',' female']:
   if k in x: return True
- return x.strip().endswith(' w')
+ return False
 
 app=Flask(__name__)
 @app.route('/')
-def home():
- return "BOT V33.45 FIX 93 LIVE OK",200
+def home(): return "V33.52 OK",200
 
 K1=json.dumps({"keyboard":[[{"text":"MENU"}]],"resize_keyboard":True,"is_persistent":True})
-K2=json.dumps({"keyboard":[[{"text":"CAMPIONATI"}],[{"text":"CORNER"},{"text":"LIVE @3+"}],[{"text":"DOPPIA"},{"text":"BOLLA 33"}],[{"text":"ESATTI"}],[{"text":"STATUS"},{"text":"TEST LIVE"}],[{"text":"SPEGNI"},{"text":"ACCENDI"}],[{"text":"CHIUDI"}]],"resize_keyboard":True,"is_persistent":True})
+K2=json.dumps({"keyboard":[[{"text":"STATUS"},{"text":"TEST LIVE"}],[{"text":"SPEGNI"},{"text":"ACCENDI"}],[{"text":"CHIUDI"}]],"resize_keyboard":True,"is_persistent":True})
 
 def tg(m,cid=None,reply=None):
  try:
   cid=cid or CHAT
-  url='https://api.telegram.org/bot'+BOT+'/sendMessage'
-  data={'chat_id':cid,'text':m,'parse_mode':'HTML'}
-  if reply: data['reply_markup']=json.loads(reply) if isinstance(reply,str) else reply
-  requests.post(url,json=data,timeout=25)
+  d={'chat_id':cid,'text':m}
+  if reply: d['reply_markup']=json.loads(reply) if isinstance(reply,str) else reply
+  requests.post('https://api.telegram.org/bot'+BOT+'/sendMessage',json=d,timeout=20)
  except: pass
 
-def api_call(ep):
+def api(ep):
  try:
   r=requests.get('https://v3.football.api-sports.io/'+ep,headers={'x-apisports-key':KEY},timeout=30)
   if r.status_code==429: return 'LIMIT'
   return r.json().get('response',[])
  except: return []
 
-def get_sot_cached(fid):
- try:
-  now=time.time()
-  if fid in sot_cache:
-   ts,val=sot_cache[fid]
-   if now-ts<180: return val
-  st=api_call('fixtures/statistics?fixture='+str(fid))
-  if st=='LIMIT': return -1
-  if not st: return 0
-  sot=0
-  for s in st:
-   for x in s['statistics']:
-    if x['type']=='Shots on Goal':
-     v=x['value']
-     if v is None: continue
-     try: sot+=int(str(v))
-     except: pass
-  sot_cache[fid]=(now,sot)
-  return sot
- except: return 0
+def get_sot(fid):
+ now=time.time()
+ if fid in cache:
+  ts,v=cache[fid]
+  if now-ts<120: return v
+ st=api('fixtures/statistics?fixture='+str(fid))
+ if st=='LIMIT': return -1
+ if not st: return 0
+ s=0
+ for a in st:
+  for b in a['statistics']:
+   if b['type']=='Shots on Goal':
+    try: s+=int(str(b['value'] or 0))
+    except: pass
+ cache[fid]=(now,s)
+ return s
 
 def poll():
  global is_paused,last_id
@@ -72,59 +61,43 @@ def poll():
  except: pass
  while True:
   try:
-   u='https://api.telegram.org/bot'+BOT+'/getUpdates?offset='+str(last_id+1)+'&timeout=20'
-   r=requests.get(u,timeout=35).json()
-   if r.get('ok'):
-    for upd in r.get('result',[]):
-     last_id=upd['update_id']
-     msg=upd.get('message',{})
-     txt=(msg.get('text') or '').strip()
-     cid=msg.get('chat',{}).get('id')
-     if not txt: continue
-     up=txt.upper()
-     if 'MENU' in up and 'CHIUDI' not in up:
-      tg('MENU V33.45:',cid,reply=K2)
-      continue
-     if 'CHIUDI' in up:
-      tg('Chiuso',cid,reply=K1)
-      continue
-     if 'STATUS' in up:
-      games=api_call('fixtures?live=all')
-      cnt=len(games) if games!='LIMIT' and games else 0
-      tg('Live:'+str(cnt)+' Cache:'+str(len(sot_cache))+' PT:'+str(len(pt_sent))+' G:'+str(len(sot_sent)),cid,reply=K1)
-      continue
-     if 'TEST' in up:
-      games=api_call('fixtures?live=all')
-      tg('Vedo '+str(len(games) if games!='LIMIT' else 0)+' live',cid,reply=K1)
-      continue
-     if 'SPEGNI' in up:
-      is_paused=True
-      tg('PAUSA',cid,reply=K1)
-      continue
-     if 'ACCENDI' in up:
-      is_paused=False
-      tg('ATTIVO',cid,reply=K1)
-      continue
+   r=requests.get('https://api.telegram.org/bot'+BOT+'/getUpdates?offset='+str(last_id+1)+'&timeout=20',timeout=30).json()
+   for u in r.get('result',[]):
+    last_id=u['update_id']
+    txt=(u.get('message',{}).get('text') or '').strip().upper()
+    cid=u.get('message',{}).get('chat',{}).get('id')
+    if 'MENU' in txt: tg('MENU V33.52',cid,reply=K2)
+    elif 'CHIUDI' in txt: tg('Chiuso',cid,reply=K1)
+    elif 'STATUS' in txt:
+     g=api('fixtures?live=all')
+     tg(f"Live:{len(g) if g!='LIMIT' and g else 0} PRE:{len(pre)} GIO:{len(gio)}",cid,reply=K1)
+    elif 'TEST' in txt:
+     g=api('fixtures?live=all')
+     tg(f"Vedo {len(g)} live - 5 esempi con nazione:",cid,reply=K1)
+     c=0
+     for x in g[:25]:
+      if youth(x['league']['name']): continue
+      m=x['fixture']['status']['elapsed'] or 0
+      if m<5 or m>70: continue
+      s=get_sot(x['fixture']['id'])
+      tg(f"{x['league']['country']} {x['league']['name']} - {x['teams']['home']['name']} {x['goals']['home'] or 0}-{x['goals']['away'] or 0} {x['teams']['away']['name']} - {s} tiri {m}m",cid,reply=K1)
+      c+=1
+      time.sleep(1)
+      if c>=5: break
+    elif 'SPEGNI' in txt: is_paused=True; tg('PAUSA',cid,reply=K1)
+    elif 'ACCENDI' in txt: is_paused=False; tg('ATTIVO',cid,reply=K1)
   except: pass
   time.sleep(1)
 
-def live_loop():
- tg('V33.45 FIX 93 LIVE ATTIVO',reply=K1)
+def live():
+ tg('V33.52 ATTIVO - 3=PREPARATI / 5=GIOCALO solo fino 70m',reply=K1)
  idx=0
  while True:
   try:
-   if is_paused:
-    time.sleep(30)
-    continue
-   games=api_call('fixtures?live=all')
-   if games=='LIMIT':
-    time.sleep(120)
-    continue
-   if not games:
-    time.sleep(60)
-    continue
-   total=len(games)
-   if idx>=total: idx=0
+   if is_paused: time.sleep(20); continue
+   games=api('fixtures?live=all')
+   if games=='LIMIT' or not games: time.sleep(90); continue
+   if idx>=len(games): idx=0
    batch=games[idx:idx+12]
    idx+=12
    for g in batch:
@@ -132,35 +105,28 @@ def live_loop():
      if youth(g['league']['name']): continue
      fid=g['fixture']['id']
      m=g['fixture']['status']['elapsed']
-     if m is None or m>88 or m<10: continue
+     if m is None or m<10 or m>70: continue # <--- BLOCCO AL 70°
+     if fid in gio: continue
+     sot=get_sot(fid)
+     if sot==-1 or sot==0: time.sleep(1); continue
+     country=g['league']['country']
+     league=g['league']['name']
      h=g['teams']['home']['name']
      a=g['teams']['away']['name']
      gh=g['goals']['home'] or 0
      ga=g['goals']['away'] or 0
-     tot=gh+ga
-     sot=get_sot_cached(fid)
-     if sot==-1:
-      time.sleep(2)
-      continue
-     if sot==0:
-      time.sleep(1.1)
-      continue
-     if fid not in pt_sent and m<=55 and sot>=3:
-      tg('PRIMO TEMPO '+h+' '+str(gh)+'-'+str(ga)+' '+a+' '+str(sot)+' TIRI '+str(m)+'m',reply=K1)
-      pt_sent.add(fid)
-     if fid not in sot_sent and sot>=5:
-      tg('GIOCALO! '+h+' '+str(gh)+'-'+str(ga)+' '+a+' '+str(sot)+' TIRI '+str(m)+'m '+g['league']['name'],reply=K1)
-      sot_sent.add(fid)
-      gol_tracker[fid]=tot
-     if fid in sot_sent and fid not in gol_fatto and tot>gol_tracker.get(fid,0):
-      tg('GOAL! '+h+' '+str(gh)+'-'+str(ga)+' '+a,reply=K1)
-      gol_fatto.add(fid)
-     time.sleep(1.2)
+     base=f"{country} {league} - {h} {gh}-{ga} {a} - {sot} tiri {m}m"
+     if sot>=3 and fid not in pre:
+      tg(f"PREPARATI {base}",reply=K1)
+      pre.add(fid)
+     if sot>=5 and fid not in gio:
+      tg(f"GIOCALO {base}",reply=K1)
+      gio.add(fid)
+     time.sleep(1.1)
     except: continue
-   time.sleep(15)
-  except: time.sleep(15)
+   time.sleep(12)
+  except: time.sleep(10)
 
 threading.Thread(target=poll,daemon=True).start()
-threading.Thread(target=live_loop,daemon=True).start()
-if __name__=='__main__':
- app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)))
+threading.Thread(target=live,daemon=True).start()
+if __name__=='__main__': app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)))
