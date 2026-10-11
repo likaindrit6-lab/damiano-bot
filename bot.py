@@ -15,11 +15,11 @@ def is_youth_league(name):
     return any(x in n for x in bad)
 app=Flask(__name__)
 @app.route('/')
-def home(): return f'BOT V33.12 NO BLOCK - {datetime.now(ITALY).strftime("%H:%M")}',200
+def home(): return f'BOT V33.17 FIX OK - {datetime.now(ITALY).strftime("%H:%M")}',200
 TAST_MAIN=json.dumps({"inline_keyboard":[
-    [{"text":"📋 CAMPIONATI - 33 NAZIONI","callback_data":"open_leagues"}],
-    [{"text":"🚩 CORNER 90% (SOLO RICHIESTA)","callback_data":"corner"},{"text":"🔥 LIVE 90% @3+","callback_data":"high"}],
-    [{"text":"💎 DOPPIA ALTA %","callback_data":"doppia"},{"text":"🌍 BOLLA 33","callback_data":"bolla"}],
+    [{"text":"📋 CAMPIONATI","callback_data":"open_leagues"}],
+    [{"text":"🚩 CORNER","callback_data":"corner"},{"text":"🔥 LIVE 90% @3+","callback_data":"high"}],
+    [{"text":"💎 DOPPIA","callback_data":"doppia"},{"text":"🌍 BOLLA 33","callback_data":"bolla"}],
     [{"text":"🎯 ESATTI","callback_data":"esatti"}],
     [{"text":"📊 STATUS","callback_data":"status"},{"text":"⏸️ SPEGNI","callback_data":"spegni"},{"text":"▶️ ACCENDI","callback_data":"accendi"}]
 ]})
@@ -96,7 +96,7 @@ def get_high_odd_live(fid):
         for book in data[0].get('bookmakers',[])[:4]:
             for bet in book.get('bets',[]):
                 bname=bet['name'].lower()
-                if 'next goal' in bname or 'over/under' in bname or 'goals over/under' in bname or 'match winner' in bname:
+                if 'next goal' in bname or 'over/under' in bname or 'match winner' in bname:
                     for v in bet['values']:
                         try:
                             odd=float(v['odd'])
@@ -156,17 +156,12 @@ def run_bolla(cid=None):
                 if f['fixture']['status']['short']!='NS': continue
                 found=f; break
         if not found: continue
-        fid=found['fixture']['id']
-        ora=found['fixture']['date'][11:16]
-        home=found['teams']['home']['name']
-        away=found['teams']['away']['name']
-        league=found['league']['name']
-        dc=get_double_chance(fid) or "1X"
-        time.sleep(0.5)
+        fid=found['fixture']['id']; ora=found['fixture']['date'][11:16]; home=found['teams']['home']['name']; away=found['teams']['away']['name']; league=found['league']['name']
+        dc=get_double_chance(fid) or "1X"; time.sleep(0.5)
         sel.append(f"{ora} {home} vs {away} -> {dc} ({league})")
         if len(sel)>=33: break
     if not sel: tg('Oggi nessuna TOP LEAGUE',cid); return
-    tg(f"BOLLA EUROPA {len(sel)} NAZIONI\n\n"+'\n'.join([f"{i+1}. {m}" for i,m in enumerate(sel)]),cid)
+    tg(f"BOLLA {len(sel)} NAZIONI\n\n"+'\n'.join([f"{i+1}. {m}" for i,m in enumerate(sel)]),cid)
 def run_doppia(cid=None):
     data=get_fixtures_today()
     if not data or data=='LIMIT': tg('DOPPIA: Limite API',cid); return
@@ -185,12 +180,12 @@ def run_doppia(cid=None):
             time.sleep(0.6)
             if len(out)>=15: break
         except: continue
-    if not out: tg('Nessun OVER 1.5 <1.55 oggi',cid); return
-    tg(f"DOPPIA ALTA % - {len(out)} OVER 1.5\n\n"+'\n'.join([f"{i+1}. {m}" for i,m in enumerate(out)]),cid)
+    if not out: tg('Nessun OVER 1.5 oggi',cid); return
+    tg(f"DOPPIA {len(out)} OVER 1.5\n\n"+'\n'.join([f"{i+1}. {m}" for i,m in enumerate(out)]),cid)
 def run_corner(cid=None):
     data=get_fixtures_today()
     if not data or data=='LIMIT': tg('CORNER: Limite API',cid); return
-    tg('Cerco CORNER OVER 7.5 SOLO SU RICHIESTA... 30 sec',cid)
+    tg('Cerco CORNER...',cid)
     out=[]
     for f in data:
         try:
@@ -204,160 +199,4 @@ def run_corner(cid=None):
             found=False
             for book in d[0].get('bookmakers',[])[:3]:
                 for bet in book.get('bets',[]):
-                    if 'corner' in bet['name'].lower():
-                        for v in bet['values']:
-                            if 'Over 7.5' in v['value']:
-                                try:
-                                    if float(v['odd']) < 1.90: found=True
-                                except: pass
-            if found:
-                ora=f['fixture']['date'][11:16]; home=f['teams']['home']['name']; away=f['teams']['away']['name']; league=f['league']['name']
-                out.append(f"{ora} {home} vs {away} ({league})")
-            time.sleep(0.6)
-            if len(out)>=15: break
-        except: continue
-    if not out: tg('Nessun OVER 7.5 oggi',cid); return
-    tg(f"🚩 CORNER 90% - {len(out)} PARTITE - SOLO SU RICHIESTA\n\n"+'\n'.join([f"{i+1}. {m}" for i,m in enumerate(out)]),cid)
-def run_high_live_manual(cid=None):
-    games=api('https://v3.football.api-sports.io/fixtures?live=all')
-    if not games or games=='LIMIT': tg('LIVE: Limite API o nessuna live',cid); return
-    tg('Cerco LIVE 90% @3+... 30 sec',cid)
-    out=[]
-    for g in games:
-        try:
-            if g['league']['country'] not in EUROPA_33: continue
-            if is_youth_league(g['league']['name']): continue
-            fid=g['fixture']['id']; m=g['fixture']['status']['elapsed']
-            if m is None or m < 55: continue
-            st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}')
-            sot=0
-            if st and len(st)>=2:
-                for s in st:
-                    for x in s['statistics']:
-                        if x['type']=='Shots on Goal':
-                            try: sot+=int(str(x['value'] or 0) or 0)
-                            except: pass
-            if sot < 5: continue
-            high=get_high_odd_live(fid)
-            if high:
-                home=g['teams']['home']['name']; away=g['teams']['away']['name']; gh=g['goals']['home'] or 0; ga=g['goals']['away'] or 0
-                out.append(f"{home} {gh}-{ga} {away} - {sot} TIRI\n{high}\n{g['league']['name']}")
-            time.sleep(0.8)
-            if len(out)>=10: break
-        except: continue
-    if not out: tg('Nessun LIVE @3+ in questo momento',cid); return
-    tg(f"🔥 LIVE 90% QUOTA ALTA 3+ - {len(out)} PARTITE\n\n"+'\n\n'.join([f"{i+1}. {m}" for i,m in enumerate(out)]),cid)
-def run_esatti(cid=None):
-    data=get_fixtures_today()
-    if not data or data=='LIMIT': tg('ESATTI: Limite API',cid); return
-    tg('Cerco 5 RISULTATI... 40 sec',cid)
-    sel=[]
-    for f in data:
-        try:
-            if f['league']['country'] not in EUROPA_33: continue
-            if f['league']['id']!=TOP_LEAGUES.get(f['league']['country']): continue
-            if is_youth_league(f['league']['name']): continue
-            if f['fixture']['status']['short']!='NS': continue
-            fid=f['fixture']['id']
-            scores=get_correct_scores(fid)
-            if len(scores)<3: continue
-            ora=f['fixture']['date'][11:16]; home=f['teams']['home']['name']; away=f['teams']['away']['name']; league=f['league']['name']
-            txt_score=" - ".join(scores[:5])
-            sel.append(f"{ora} {home} vs {away} ({league})\n -> {txt_score}")
-            time.sleep(0.8)
-            if len(sel)>=10: break
-        except: continue
-    if not sel: tg('Nessun big match oggi',cid); return
-    tg(f"MULTI ESATTI - {len(sel)} PARTITE\n\n" + "\n\n".join([f"{i+1}. {m}" for i,m in enumerate(sel)]),cid)
-def poll():
-    global is_paused,last_id
-    try:
-        if BOT: requests.get(f'https://api.telegram.org/bot{BOT}/deleteWebhook?drop_pending_updates=true',timeout=10)
-    except: pass
-    while True:
-        try:
-            if not BOT: time.sleep(60); continue
-            base=f'https://api.telegram.org/bot{BOT}'; url=base+f'/getUpdates?offset={last_id+1}&timeout=20'
-            r=requests.get(url,timeout=30).json()
-            if r.get('ok'):
-                for u in r.get('result',[]):
-                    last_id=u['update_id']
-                    cb=u.get('callback_query')
-                    if cb:
-                        cid=cb['message']['chat']['id']; mid=cb['message']['message_id']; data=cb.get('data','')
-                        try: requests.post(base+'/answerCallbackQuery',json={'callback_query_id':cb['id']},timeout=10)
-                        except: pass
-                        if data=='open_leagues': tg_edit(mid,cid,"📋 SCEGLI NAZIONE:",build_leagues_keyboard(1))
-                        elif data.startswith('page_'):
-                            p=int(data.split('_')[1]); tg_edit(mid,cid,f"📋 PAGINA {p}:",build_leagues_keyboard(p))
-                        elif data=='back_main': tg_edit(mid,cid,"✅ BOT V33.12 NO BLOCK",TAST_MAIN)
-                        elif data.startswith('league_'):
-                            country=data.replace('league_',''); lid=TOP_LEAGUES.get(country)
-                            if lid: tg(media(lid,country),cid)
-                        elif data=='corner': run_corner(cid)
-                        elif data=='high': run_high_live_manual(cid)
-                        elif data=='bolla': run_bolla(cid)
-                        elif data=='doppia': run_doppia(cid)
-                        elif data=='esatti': run_esatti(cid)
-                        elif 'spegni' in data: is_paused=True; tg('⏸️ PAUSA',cid)
-                        elif 'accendi' in data: is_paused=False; tg('▶️ V33.12 NO BLOCK ATTIVO',cid,inline=TAST_MAIN)
-                        elif 'status' in data: tg('STATUS V33.12: NO BLOCK - LIVE OGNI ORA @3+',cid)
-                        continue
-                    msg=u.get('message',{}); txt=(msg.get('text') or '').strip(); low=txt.lower(); cid=msg.get('chat',{}).get('id')
-                    if not txt: continue
-                    if '/start' in low:
-                        is_paused=False
-                        tg('Pulisco vecchia tastiera...',cid,remove=True)
-                        time.sleep(1)
-                        tg('✅ BOT V33.12 NO BLOCK\n✅ LIVE OGNI ORA @3+',cid,inline=TAST_MAIN)
-        except: pass
-        time.sleep(1)
-def live_loop():
-    global last_bolla_hour
-    tg('Pulisco...',remove=True); time.sleep(1)
-    tg('✅ BOT V33.12 NO BLOCK - LIVE OGNI ORA @3+ ATTIVO',inline=TAST_MAIN)
-    while True:
-        try:
-            if is_paused: time.sleep(30); continue
-            now=datetime.now(ITALY)
-            if 2<=now.hour<6: time.sleep(300); continue
-            # LIVE OGNI ORA @3+ - SENZA BLOCCHI
-            if now.hour!=last_bolla_hour and now.minute<10:
-                last_bolla_hour=now.hour
-                games_hour=api('https://v3.football.api-sports.io/fixtures?live=all')
-                if games_hour and games_hour!='LIMIT':
-                    for g in games_hour:
-                        try:
-                            if g['league']['country'] not in EUROPA_33: continue
-                            if is_youth_league(g['league']['name']): continue
-                            fid=g['fixture']['id']
-                            m=g['fixture']['status']['elapsed']
-                            if m is None or m < 60: continue
-                            st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}')
-                            sot=0
-                            if st and len(st)>=2:
-                                for s in st:
-                                    for x in s['statistics']:
-                                        if x['type']=='Shots on Goal':
-                                            try: sot+=int(str(x['value'] or 0) or 0)
-                                            except: pass
-                            if sot >= 6:
-                                high=get_high_odd_live(fid)
-                                if high:
-                                    home=g['teams']['home']['name']; away=g['teams']['away']['name']
-                                    gh=g['goals']['home'] or 0; ga=g['goals']['away'] or 0
-                                    tg(f"🔥 LIVE 90% @3+ {home} {gh}-{ga} {away} - {sot} TIRI\n{high}\n{g['league']['name']}")
-                                    time.sleep(1)
-                        except: continue
-            games=api('https://v3.football.api-sports.io/fixtures?live=all')
-            if games=='LIMIT': time.sleep(3600); continue
-            if not games: time.sleep(60); continue
-            for g in games:
-                try:
-                    if g['league']['country'] not in EUROPA_33: continue
-                    if is_youth_league(g['league']['name']): continue
-                    fid=g['fixture']['id']; m=g['fixture']['status']['elapsed']
-                    if m is None: continue
-                    home=g['teams']['home']['name']; away=g['teams']['away']['name']
-                    gh=g['goals']['home'] or 0; ga=g['goals']['away'] or 0
-                    st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}')
+                    if 'corner' in bet
