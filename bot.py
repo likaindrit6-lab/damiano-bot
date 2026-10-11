@@ -5,7 +5,6 @@ from zoneinfo import ZoneInfo
 BOT=os.getenv('BOT_TOKEN');CHAT=os.getenv('CHAT_ID');KEY=os.getenv('API_FOOTBALL_KEY')
 ITALY=timezone(timedelta(hours=2));ROME=ZoneInfo("Europe/Rome")
 is_paused=False;last_id=0;last_bolla_hour=-1
-sot_sent=set();gol_tracker={};gol_fatto=set();av_s_first=set();high_sent=set()
 TOP_LEAGUES={'Italy':135,'England':39,'Spain':140,'Germany':78,'France':61,'Netherlands':88,'Portugal':94,'Belgium':144,'Turkey':203,'Scotland':179,'Austria':218,'Switzerland':207,'Denmark':106,'Sweden':113,'Norway':103,'Poland':107,'Czech Republic':345,'Croatia':210,'Serbia':286,'Greece':197,'Romania':283,'Bulgaria':172,'Hungary':271,'Slovakia':332,'Slovenia':373,'Ireland':344,'Wales':110,'Finland':244,'Iceland':164,'Cyprus':318,'Malta':389,'Luxembourg':261,'Belarus':116}
 EUROPA_33=list(TOP_LEAGUES.keys())
 def is_youth_league(name):
@@ -16,7 +15,7 @@ def is_youth_league(name):
     return any(x in n for x in bad)
 app=Flask(__name__)
 @app.route('/')
-def home(): return f'BOT V33.12 SEMPLICE - {datetime.now(ITALY).strftime("%H:%M")}',200
+def home(): return f'BOT V33.12 NO BLOCK - {datetime.now(ITALY).strftime("%H:%M")}',200
 TAST_MAIN=json.dumps({"inline_keyboard":[
     [{"text":"📋 CAMPIONATI - 33 NAZIONI","callback_data":"open_leagues"}],
     [{"text":"🚩 CORNER 90% (SOLO RICHIESTA)","callback_data":"corner"},{"text":"🔥 LIVE 90% @3+","callback_data":"high"}],
@@ -101,7 +100,7 @@ def get_high_odd_live(fid):
                     for v in bet['values']:
                         try:
                             odd=float(v['odd'])
-                            if 3.0 <= odd <= 4.2:
+                            if odd >= 3.0:
                                 return f"{bet['name']} {v['value']} @ {odd}"
                         except: continue
     except: pass
@@ -240,7 +239,7 @@ def run_high_live_manual(cid=None):
                             except: pass
             if sot < 5: continue
             high=get_high_odd_live(fid)
-            if high and ('3.' in high or '4.' in high):
+            if high:
                 home=g['teams']['home']['name']; away=g['teams']['away']['name']; gh=g['goals']['home'] or 0; ga=g['goals']['away'] or 0
                 out.append(f"{home} {gh}-{ga} {away} - {sot} TIRI\n{high}\n{g['league']['name']}")
             time.sleep(0.8)
@@ -291,7 +290,7 @@ def poll():
                         if data=='open_leagues': tg_edit(mid,cid,"📋 SCEGLI NAZIONE:",build_leagues_keyboard(1))
                         elif data.startswith('page_'):
                             p=int(data.split('_')[1]); tg_edit(mid,cid,f"📋 PAGINA {p}:",build_leagues_keyboard(p))
-                        elif data=='back_main': tg_edit(mid,cid,"✅ BOT V33.12 SEMPLICE",TAST_MAIN)
+                        elif data=='back_main': tg_edit(mid,cid,"✅ BOT V33.12 NO BLOCK",TAST_MAIN)
                         elif data.startswith('league_'):
                             country=data.replace('league_',''); lid=TOP_LEAGUES.get(country)
                             if lid: tg(media(lid,country),cid)
@@ -301,8 +300,8 @@ def poll():
                         elif data=='doppia': run_doppia(cid)
                         elif data=='esatti': run_esatti(cid)
                         elif 'spegni' in data: is_paused=True; tg('⏸️ PAUSA',cid)
-                        elif 'accendi' in data: is_paused=False; tg('▶️ V33.12 ATTIVO',cid,inline=TAST_MAIN)
-                        elif 'status' in data: tg('STATUS V33.12: SEMPLICE - 3 TIRI 1T / 5 TIRI PRIMA 70 - NO MINUTI',cid)
+                        elif 'accendi' in data: is_paused=False; tg('▶️ V33.12 NO BLOCK ATTIVO',cid,inline=TAST_MAIN)
+                        elif 'status' in data: tg('STATUS V33.12: NO BLOCK - LIVE OGNI ORA @3+',cid)
                         continue
                     msg=u.get('message',{}); txt=(msg.get('text') or '').strip(); low=txt.lower(); cid=msg.get('chat',{}).get('id')
                     if not txt: continue
@@ -310,18 +309,19 @@ def poll():
                         is_paused=False
                         tg('Pulisco vecchia tastiera...',cid,remove=True)
                         time.sleep(1)
-                        tg('✅ BOT V33.12 SEMPLICE\n✅ 3 TIRI primo tempo\n✅ 5 TIRI prima del 70\n📋 Clicca sotto',cid,inline=TAST_MAIN)
+                        tg('✅ BOT V33.12 NO BLOCK\n✅ LIVE OGNI ORA @3+',cid,inline=TAST_MAIN)
         except: pass
         time.sleep(1)
 def live_loop():
-    global last_bolla_hour,sot_sent,gol_tracker,gol_fatto,av_s_first,high_sent
+    global last_bolla_hour
     tg('Pulisco...',remove=True); time.sleep(1)
-    tg('✅ BOT V33.12 SEMPLICE ATTIVO',inline=TAST_MAIN)
+    tg('✅ BOT V33.12 NO BLOCK - LIVE OGNI ORA @3+ ATTIVO',inline=TAST_MAIN)
     while True:
         try:
             if is_paused: time.sleep(30); continue
             now=datetime.now(ITALY)
             if 2<=now.hour<6: time.sleep(300); continue
+            # LIVE OGNI ORA @3+ - SENZA BLOCCHI
             if now.hour!=last_bolla_hour and now.minute<10:
                 last_bolla_hour=now.hour
                 games_hour=api('https://v3.football.api-sports.io/fixtures?live=all')
@@ -331,7 +331,6 @@ def live_loop():
                             if g['league']['country'] not in EUROPA_33: continue
                             if is_youth_league(g['league']['name']): continue
                             fid=g['fixture']['id']
-                            if fid in high_sent: continue
                             m=g['fixture']['status']['elapsed']
                             if m is None or m < 60: continue
                             st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}')
@@ -344,11 +343,10 @@ def live_loop():
                                             except: pass
                             if sot >= 6:
                                 high=get_high_odd_live(fid)
-                                if high and ('3.' in high or '4.' in high):
+                                if high:
                                     home=g['teams']['home']['name']; away=g['teams']['away']['name']
                                     gh=g['goals']['home'] or 0; ga=g['goals']['away'] or 0
                                     tg(f"🔥 LIVE 90% @3+ {home} {gh}-{ga} {away} - {sot} TIRI\n{high}\n{g['league']['name']}")
-                                    high_sent.add(fid)
                                     time.sleep(1)
                         except: continue
             games=api('https://v3.football.api-sports.io/fixtures?live=all')
@@ -362,42 +360,4 @@ def live_loop():
                     if m is None: continue
                     home=g['teams']['home']['name']; away=g['teams']['away']['name']
                     gh=g['goals']['home'] or 0; ga=g['goals']['away'] or 0
-                    # PRIMO TEMPO - 3 TIRI IN SU - SENZA FILTRO MINUTI
-                    if fid not in av_s_first:
-                        st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}')
-                        sot=0
-                        if st and len(st)>=2:
-                            for s in st:
-                                for x in s['statistics']:
-                                    if x['type']=='Shots on Goal':
-                                        try: sot+=int(str(x['value'] or 0) or 0)
-                                        except: pass
-                        if m <= 45 and sot >= 3:
-                            tg(f"⏱️ PRIMO TEMPO {home} {gh}-{ga} {away} - {sot} TIRI")
-                            av_s_first.add(fid)
-                            continue
-                    # 5 TIRI PRIMA DEL 70 - UNA VOLTA SOLA - SENZA SCRIVERE MINUTO
-                    if fid not in sot_sent and m < 70:
-                        st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}')
-                        sot=0
-                        if st and len(st)>=2:
-                            for s in st:
-                                for x in s['statistics']:
-                                    if x['type']=='Shots on Goal':
-                                        try: sot+=int(str(x['value'] or 0) or 0)
-                                        except: pass
-                        if sot >= 5:
-                            tg(f"🚀 {home} {gh}-{ga} {away} - {sot} TIRI\n{g['league']['name']}")
-                            sot_sent.add(fid)
-                            gol_tracker[fid]=gh+ga
-                    if fid in sot_sent and fid not in gol_fatto:
-                        if (gh+ga) > gol_tracker.get(fid,0):
-                            tg(f"⚽ GOAL! {home} {gh}-{ga} {away}")
-                            gol_fatto.add(fid)
-                except: continue
-            time.sleep(45)
-        except Exception as e:
-            print(e); time.sleep(15)
-threading.Thread(target=poll,daemon=True).start()
-threading.Thread(target=live_loop,daemon=True).start()
-if __name__=='__main__': app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)))
+                    st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}')
