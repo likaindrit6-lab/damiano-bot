@@ -4,7 +4,7 @@ from datetime import datetime,timezone,timedelta
 from zoneinfo import ZoneInfo
 BOT=os.getenv('BOT_TOKEN');CHAT=os.getenv('CHAT_ID');KEY=os.getenv('API_FOOTBALL_KEY')
 ITALY=timezone(timedelta(hours=2));ROME=ZoneInfo("Europe/Rome")
-is_paused=False;last_id=0;av_g={};av_s=set();av_s_first=set();last_bolla_hour=-1;last_doppia_hour=-1
+is_paused=False;last_id=0;av_g={};av_s=set();av_s_first=set();last_bolla_hour=-1
 
 TOP_LEAGUES={'Italy':135,'England':39,'Spain':140,'Germany':78,'France':61,'Netherlands':88,'Portugal':94,'Belgium':144,'Turkey':203,'Scotland':179,'Austria':218,'Switzerland':207,'Denmark':106,'Sweden':113,'Norway':103,'Poland':107,'Czech Republic':345,'Croatia':210,'Serbia':286,'Greece':197,'Romania':283,'Bulgaria':172,'Hungary':271,'Slovakia':332,'Slovenia':373,'Ireland':344,'Wales':110,'Finland':244,'Iceland':164,'Cyprus':318,'Malta':389,'Luxembourg':261,'Belarus':116,'Russia':235}
 
@@ -15,7 +15,7 @@ def is_youth_league(name):
 
 app=Flask(__name__)
 @app.route('/')
-def home():return f'BOT V33 STATS 35 - {datetime.now(ITALY).strftime("%H:%M")}',200
+def home():return f'BOT V35 ANGOLI+STATS - {datetime.now(ITALY).strftime("%H:%M")}',200
 
 TAST=json.dumps({"keyboard":[
 ["Serie A","Serie B","Inghilterra"],
@@ -24,6 +24,7 @@ TAST=json.dumps({"keyboard":[
 ["DOPPIA ALTA %"],
 ["BOLLA EUROPA 33 NAZIONI"],
 ["📊 STATISTICHE 35 NAZIONI"],
+["🚩 ANGOLI +6 - 35 NAZIONI"],
 ["MODELLO AMERICANO 33"],
 ["STATUS"],
 ["ACCENDI","SPEGNI"],
@@ -48,6 +49,19 @@ def api(url):
   return r.json().get('response',[])
  except:return []
 
+def get_corners_fixture(fid):
+ try:
+  stats=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}')
+  if not stats or stats=='LIMIT' or len(stats)<2:return None
+  tot=0
+  for team in stats:
+   for s in team['statistics']:
+    if 'Corner' in s['type']:
+     try: tot+=int(str(s['value'] or 0))
+     except: pass
+  return tot
+ except:return None
+
 def media(league_id,name,cid=None):
  txt=f"{name.upper()} - {datetime.now(ITALY).strftime('%d/%m %H:%M')}\n\n"
  teams=api(f'https://v3.football.api-sports.io/teams?league={league_id}&season=2024')
@@ -67,17 +81,53 @@ def media(league_id,name,cid=None):
   time.sleep(0.35)
  return txt
 
+def media_angoli(league_id,name):
+ txt=f"🚩 {name.upper()} - ANGOLI MEDIA ULTIME 5\n{datetime.now(ITALY).strftime('%d/%m')}\n\n"
+ teams=api(f'https://v3.football.api-sports.io/teams?league={league_id}&season=2024')
+ if not teams or teams=='LIMIT':return f'Errore {name}'
+ trovati=0
+ for t in teams[:12]:
+  tid=t['team']['id'];tname=t['team']['name']
+  last=api(f'https://v3.football.api-sports.io/fixtures?team={tid}&last=5&season=2024')
+  if not last or last=='LIMIT':time.sleep(0.5);continue
+  tot_corners=0;c=0
+  for p in last:
+   fid=p['fixture']['id']
+   corn=get_corners_fixture(fid)
+   if corn is None:continue
+   tot_corners+=corn;c+=1
+   time.sleep(0.4)
+  if c==0:continue
+  med=tot_corners/c
+  if med>=6.0:
+   txt+=f"🔥 {tname}: {med:.1f} angoli ({c} partite)\n"
+   trovati+=1
+  time.sleep(0.3)
+ if trovati==0:
+  txt+=f"Nessuna squadra con +6 angoli in {name}\n"
+ return txt
+
 def media_tutte_35(cid):
-    tg(f"⏳ PARTITO STATISTICHE 35 NAZIONI\nCi metto 4-5 minuti, ti mando 1 messaggio per nazione\nInizio da Italia...",cid,True)
+    tg(f"⏳ PARTITO STATISTICHE GOL 35 NAZIONI\n4-5 minuti, 1 messaggio per nazione",cid,True)
     for country, lid in TOP_LEAGUES.items():
         try:
-            if is_youth_league(country):continue
             res = media(lid, f"{country} - ID {lid}", cid)
             tg(res, cid, True)
-            time.sleep(2)
+            time.sleep(1)
         except Exception as e:
             tg(f"Errore {country}: {e}", cid, True)
-    tg("✅ FINITO STATISTICHE 35 NAZIONI",cid,True)
+    tg("✅ FINITO STATISTICHE 35 GOL",cid,True)
+
+def media_tutte_angoli(cid):
+    tg(f"⏳ PARTITO ANGOLI +6 - 35 NAZIONI\n8-10 minuti, filtro solo >6 angoli/partita",cid,True)
+    for country, lid in TOP_LEAGUES.items():
+        try:
+            res = media_angoli(lid, country)
+            tg(res, cid, True)
+            time.sleep(1)
+        except Exception as e:
+            tg(f"Errore {country}: {e}", cid, True)
+    tg("✅ FINITO ANGOLI +6 - 35 NAZIONI",cid,True)
 
 def get_double_chance(fid):
  try:
@@ -123,7 +173,7 @@ def run_bolla(cid=None,auto=False):
   if not auto:tg('BOLLA: Limite API',cid,True)
   return
  sel=[]
- if not auto:tg('⏳ Cerco SOLO TOP LEAGUE + DOPPIA PIU ALTA... 30 sec',cid,True)
+ if not auto:tg('⏳ Cerco SOLO TOP LEAGUE + DOPPIA PIU ALTA...',cid,True)
  for country,top_id in TOP_LEAGUES.items():
   found=None
   for f in data:
@@ -133,13 +183,11 @@ def run_bolla(cid=None,auto=False):
     found=f;break
   if not found:continue
   fid=found['fixture']['id'];ora=found['fixture']['date'][11:16];home=found['teams']['home']['name'];away=found['teams']['away']['name'];league=found['league']['name']
-  dc=get_double_chance(fid)
-  if not dc:dc="1X (no quota)"
-  else:time.sleep(0.6)
+  dc=get_double_chance(fid) or "1X (no quota)"
   sel.append(f"{ora} {home} vs {away} -> {dc} ({league} - {country})")
   if len(sel)>=35:break
  if not sel:
-  if not auto:tg('Oggi nessuna TOP LEAGUE in programma (pre-match)',cid,True)
+  if not auto:tg('Oggi nessuna TOP LEAGUE in programma',cid,True)
   return
  tg(f"🌍 BOLLA EUROPA {len(sel)} NAZIONI\n\n" + '\n'.join([f"{i+1}. {m}" for i,m in enumerate(sel)]),cid,True)
 
@@ -184,20 +232,21 @@ def poll():
      last_id=u['update_id'];msg=u.get('message',{});txt=(msg.get('text') or '').strip();low=txt.lower();cid=msg.get('chat',{}).get('id')
      if not txt:continue
      if 'chiudi menu' in low:tg('✅ Menu chiuso',cid,True,True);continue
-     elif 'apri menu' in low:tg('✅ Menu aperto',cid,True,False);continue
+     elif 'apri menu' in low:tg('✅ Menu aperto - LIVE MONDO + BOLLA + STATS',cid,True,False);continue
      elif 'spegni' in low:is_paused=True;tg('⏸️ PAUSA',cid,True);continue
-     elif 'accendi' in low or '/start' in low:is_paused=False;tg('▶️ V33 ATTIVO - 35 NAZIONI',cid,True);continue
-     elif 'statistiche 35' in low or 'stat 35' in low:
-         threading.Thread(target=media_tutte_35,args=(cid,),daemon=True).start()
-         continue
-     elif 'status' in low:tg(f'STATUS V33 - {datetime.now(ITALY).strftime("%H:%M")}',cid,True);continue
+     elif 'accendi' in low or '/start' in low:is_paused=False;tg('▶️ V35 ATTIVO - 35 NAZIONI + ANGOLI',cid,True);continue
+     elif 'angoli' in low:
+         threading.Thread(target=media_tutte_angoli,args=(cid,),daemon=True).start();continue
+     elif 'statistiche 35' in low:
+         threading.Thread(target=media_tutte_35,args=(cid,),daemon=True).start();continue
+     elif 'status' in low:tg(f'STATUS V35 - {datetime.now(ITALY).strftime("%H:%M")}',cid,True);continue
      elif 'doppia' in low:run_doppia(cid);continue
      elif 'bolla' in low or 'americano' in low:run_bolla(cid);continue
   except:pass
   time.sleep(2)
 
 def live_loop():
- tg('✅ BOT V33 ATTIVO\n📊 NUOVO TASTO: STATISTICHE 35 NAZIONI\n🌍 LIVE MONDO\n🇪🇺 BOLLA 35',None,True)
+ tg('✅ BOT V35 ATTIVO\n📊 STATISTICHE 35 NAZIONI GOL\n🚩 ANGOLI +6 - 35 NAZIONI\n🌍 LIVE MONDO Tiri+Corner\n🇪🇺 BOLLA 35',None,True)
  while True:
   try:
    if is_paused:time.sleep(30);continue
@@ -221,7 +270,7 @@ def live_loop():
         if 'Corner' in x['type']:
          try:corn+=int(str(x['value'] or 0))
          except:pass
-     if sot>=2:tg(f"🔥 PRIMO TEMPO {m}' {g['league']['country']} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{corn}");av_s_first.add(fid)
+     if sot>=2 or corn>=4:tg(f"🔥 PRIMO TEMPO {m}' {g['league']['country']} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{corn}");av_s_first.add(fid)
     if 65<=m<=90 and fid not in av_s:
      st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}');sot=0;corn=0
      if st and len(st)>=2:
