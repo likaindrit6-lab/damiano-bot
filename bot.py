@@ -16,8 +16,8 @@ def is_youth_league(name):
 
 app=Flask(__name__)
 @app.route('/')
-def home():return f'BOT V31 PRE-MATCH - {datetime.now(ITALY).strftime("%H:%M")}',200
-TAST=json.dumps({"keyboard":[["Serie A","Serie B","Inghilterra"],["Spagna","Germania","Francia"],["Olanda","Portogallo","Turchia"],["DOPPIA ALTA %"],["BOLLA EUROPA 33 NAZIONI"],["MODELLO AMERICANO 33"],["STATUS"],["ACCENDI","SPEGNI"]],"resize_keyboard":True})
+def home():return f'BOT V31 CLEAN - {datetime.now(ITALY).strftime("%H:%M")}',200
+TAST=json.dumps({"keyboard":[["Serie A","Serie B","Inghilterra"],["Spagna","Germania","Francia"],["Olanda","Portogallo","Turchia"],["DOPPIA ALTA %"],["BOLLA EUROPA 33 NAZIONI"],["STATUS"],["ACCENDI","SPEGNI"]],"resize_keyboard":True})
 
 def tg(m,cid=None,keys=False):
  try:
@@ -90,7 +90,7 @@ def media(league_id,name):
 
 def get_fixtures_today():
  today=datetime.now(ROME).strftime('%Y-%m-%d')
- return api(f'https://v3.football.api-sports.io/fixtures?date={today}')
+ return api(f'https://v3.football.api-sports.io/fixtures?date={today}&timezone=Europe/Rome')
 
 def run_bolla(cid=None,auto=False):
  data=get_fixtures_today()
@@ -138,89 +138,4 @@ def run_doppia(cid=None,auto=False):
             if over_odd is None:continue
             if over_odd>1.55:continue
             ora=f['fixture']['date'][11:16];home=f['teams']['home']['name'];away=f['teams']['away']['name'];league=f['league']['name']
-            out.append(f"{ora} {home} vs {away} -> OVER 1.5 @ {over_odd} ({league})")
-            time.sleep(0.6)
-            if len(out)>=15:break
-        except:continue
-    if not out:
-        if not auto:tg('🔥 Oggi nessun OVER 1.5 <1.55 nelle TOP LEAGUE pre-match',cid,True)
-        return
-    pref=f"🔥 DOPPIA ALTA % - {len(out)} OVER 1.5 PIU SICURI PRE-MATCH\n\n" if not auto else f"🔥 DOPPIA AUTOMATICA - {len(out)} OVER 1.5 SICURI PRE-MATCH\n\n"
-    tg(pref+'\n'.join([f"{i+1}. {m}" for i,m in enumerate(out)]),cid,True)
-
-def run_americano(cid=None):run_bolla(cid,False)
-
-def poll():
- global is_paused,last_id
- try:
-  if BOT:requests.get(f'https://api.telegram.org/bot{BOT}/deleteWebhook?drop_pending_updates=true',timeout=10)
- except:pass
- while True:
-  try:
-   if not BOT:time.sleep(60);continue
-   base=f'https://api.telegram.org/bot{BOT}';url=base+f'/getUpdates?offset={last_id+1}&timeout=20'
-   r=requests.get(url,timeout=30).json()
-   if r.get('ok'):
-    for u in r.get('result',[]):
-     last_id=u['update_id'];msg=u.get('message',{});txt=(msg.get('text') or '').strip();low=txt.lower();cid=msg.get('chat',{}).get('id')
-     if not txt:continue
-     if 'spegni' in low:is_paused=True;tg('⏸️ PAUSA',cid,True)
-     elif 'accendi' in low or '/start' in low:is_paused=False;tg('▶️ V31 PRE-MATCH ATTIVO',cid,True)
-     elif 'status' in low:tg('STATUS: V31 LIVE MONDO + BOLLA DOPPIA PIU ALTA + DOPPIA OVER 1.5 PRE-MATCH',cid,True)
-     elif 'doppia' in low:run_doppia(cid)
-     elif 'bolla' in low or 'americano' in low:run_bolla(cid)
-     elif low in [k.lower() for k in LEAGUES.keys()]:
-      for k,v in LEAGUES.items():
-       if k.lower()==low:tg(media(v,k),cid,True)
-  except:pass
-  time.sleep(2)
-
-def live_loop():
- global last_bolla_hour,last_doppia_hour
- tg('✅ BOT V31 PRE-MATCH ATTIVO\n🌍 LIVE MONDO\n🇪🇺 BOLLA = TOP LEAGUE + DOPPIA PIU ALTA (1X/X2/12)\n🔥 DOPPIA = TOP LEAGUE + OVER 1.5 SICURO PRE-MATCH',keys=True)
- while True:
-  try:
-   if is_paused:time.sleep(30);continue
-   now=datetime.now(ITALY)
-   if 2<=now.hour<6:time.sleep(300);continue
-   if now.hour!=last_bolla_hour and now.minute<10:
-       last_bolla_hour=now.hour
-       run_bolla(auto=True)
-       time.sleep(5)
-       run_doppia(auto=True)
-   games=api('https://v3.football.api-sports.io/fixtures?live=all')
-   if games=='LIMIT':time.sleep(3600);continue
-   if not games:time.sleep(60);continue
-   for g in games:
-    fid=g['fixture']['id'];m=g['fixture']['status']['elapsed']
-    if m is None:continue
-    home=g['teams']['home']['name'];away=g['teams']['away']['name'];gh=g['goals']['home'];ga=g['goals']['away']
-    if 30<=m<=45 and fid not in av_s_first:
-     st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}');sot=0
-     if st and len(st)>=2:
-      for s in st:
-       for x in s['statistics']:
-        if x['type']=='Shots on Goal':
-         try:sot+=int(str(x['value'] or 0).replace('%','') or 0)
-         except:pass
-     if sot>=2:tg(f"🔥 PRIMO TEMPO {m}' {g['league']['country']} {home} {gh}-{ga} {away} Tiri:{sot}");av_s_first.add(fid)
-    if 65<=m<=90 and fid not in av_s:
-     st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}');sot=0
-     if st and len(st)>=2:
-      for s in st:
-       for x in s['statistics']:
-        if x['type']=='Shots on Goal':
-         try:sot+=int(str(x['value'] or 0).replace('%','') or 0)
-         except:pass
-     if sot>=4:tg(f"🚀 GIOCALO {m}' {g['league']['country']} {home} {gh}-{ga} {away} Tiri:{sot}");av_s.add(fid);av_g[fid]=gh+ga
-   for g in games:
-    fid=g['fixture']['id']
-    if fid in av_g:
-     tot=g['goals']['home']+g['goals']['away']
-     if tot>av_g[fid]:tg(f"✅ GOAL VINTO! {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}");del av_g[fid]
-   time.sleep(60)
-  except Exception as e:print(e);time.sleep(15)
-
-threading.Thread(target=poll,daemon=True).start()
-threading.Thread(target=live_loop,daemon=True).start()
-if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)))
+            out.append(f"{ora} {home} vs {away} -> OVER
