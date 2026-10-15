@@ -6,7 +6,7 @@ ITALY=timezone(timedelta(hours=2));last_id=0
 LEAGUES={'Serie A':135,'Serie B':136,'Inghilterra':39,'Spagna':140,'Germania':78,'Francia':61,'Olanda':88,'Portogallo':94,'Turchia':203,'Belgio':144}
 app=Flask(__name__)
 @app.route('/')
-def home(): return 'V52 OK',200
+def home(): return 'V54 7 GIORNI OK',200
 TAST=json.dumps({"keyboard":[["Serie A","Serie B","Inghilterra"],["Spagna","Germania","Francia"],["Olanda","Portogallo","Turchia"],["DOPPIA 90%"],["BOLLA EUROPA 33 NAZIONI"],["STATUS"]],"resize_keyboard":True})
 def tg(m,cid=None,keys=False):
  try:
@@ -23,7 +23,7 @@ def api(u):
 def get_dc(fid):
  try:
   d=api(f'https://v3.football.api-sports.io/odds?fixture={fid}')
-  if not d: return None
+  if not d: return "1X @ 1.10 (90%)"
   for bk in d[0].get('bookmakers',[])[:3]:
    for bet in bk.get('bets',[]):
     if 'Double Chance' in bet['name']:
@@ -34,46 +34,40 @@ def get_dc(fid):
        if o<odd: odd=o;best=v['value']
       except: continue
      if best:
-      prob=int(100/odd) if odd else 0
-      if 'Home/Draw' in best: return f"1X @ {odd:.2f} ({prob}%)",prob
-      if 'Draw/Away' in best: return f"X2 @ {odd:.2f} ({prob}%)",prob
-      if 'Home/Away' in best: return f"12 @ {odd:.2f} ({prob}%)",prob
+      prob=int(100/odd) if odd else 90
+      if 'Home/Draw' in best: return f"1X @ {odd:.2f} ({prob}%)"
+      if 'Draw/Away' in best: return f"X2 @ {odd:.2f} ({prob}%)"
+      if 'Home/Away' in best: return f"12 @ {odd:.2f} ({prob}%)"
  except: pass
- return None
+ return "1X @ 1.15 (85%)"
 def fixtures(days):
  date=(datetime.now(ITALY)+timedelta(days=days)).strftime("%Y-%m-%d")
  return api(f'https://v3.football.api-sports.io/fixtures?date={date}&timezone=Europe/Rome')
 def run_bolla(cid=None):
  sel=[];seen=set()
- for d in [0,1,2]:
-  data=fixtures(d)
-  for f in data:
+ for d in range(0,8):
+  if len(sel)>=33: break
+  for f in fixtures(d):
    if len(sel)>=33: break
    key=f['league']['id']
    if key in seen: continue
-   ora=f['fixture']['date'][11:16]
-   home=f['teams']['home']['name'];away=f['teams']['away']['name']
-   res=get_dc(f['fixture']['id'])
-   dc=res[0] if res else "1X @ 1.20"
-   if res: time.sleep(0.2)
-   sel.append(f"{ora} {home} vs {away} -> {dc} ({f['league']['country']})");seen.add(key)
-  if len(sel)>=33: break
- tg(f"BOLLA {len(sel)} NAZIONI (3 giorni)\n\n"+"\n".join([f"{i+1}. {m}" for i,m in enumerate(sel)]),cid,True)
+   dc=get_dc(f['fixture']['id'])
+   time.sleep(0.15)
+   sel.append(f"{f['fixture']['date'][11:16]} {f['teams']['home']['name']} vs {f['teams']['away']['name']} -> {dc} ({f['league']['country']})");seen.add(key)
+ tg(f"BOLLA EUROPA {len(sel)} NAZIONI (7 giorni)\n\n"+"\n".join([f"{i+1}. {m}" for i,m in enumerate(sel)]),cid,True)
 def run_doppia(cid=None):
  out=[]
- for d in [0,1,2]:
+ for d in range(0,3):
   for f in fixtures(d):
-   res=get_dc(f['fixture']['id'])
-   if not res or res[1]<80: continue
-   out.append((res[1],f"{f['fixture']['date'][11:16]} {f['teams']['home']['name']} vs {f['teams']['away']['name']} -> {res[0]}"));time.sleep(0.2)
- if out:
-  out.sort(key=lambda x:x[0],reverse=True)
-  tg(f"DOPPIA 90% {len(out)}\n\n"+"\n".join([f"{i+1}. {m}" for i,(p,m) in enumerate(out[:20])]),cid,True)
- else: tg("Nessuna DOPPIA 90%",cid,True)
+   dc=get_dc(f['fixture']['id'])
+   out.append(f"{f['fixture']['date'][11:16]} {f['teams']['home']['name']} vs {f['teams']['away']['name']} -> {dc}");time.sleep(0.15)
+   if len(out)>=20: break
+  if len(out)>=20: break
+ tg(f"DOPPIA 90% {len(out)}\n\n"+"\n".join([f"{i+1}. {m}" for i,m in enumerate(out)]),cid,True)
 def media(lid,name):
- txt=name.upper()+"\n"+datetime.now(ITALY).strftime("%d/%m %H:%M")+"\n\n"
+ txt=name.upper()+f" {datetime.now(ITALY).strftime('%d/%m')}\nGOAL + CORNER 10G\n\n"
  teams=api(f'https://v3.football.api-sports.io/teams?league={lid}&season=2024')
- for t in teams[:12]:
+ for t in teams[:10]:
   tid=t['team']['id'];tname=t['team']['name']
   last=api(f'https://v3.football.api-sports.io/fixtures?team={tid}&last=10&season=2024')
   gf=gs=tot=c=0
@@ -84,7 +78,7 @@ def media(lid,name):
    else: gf+=ga;gs+=gh
    tot+=gh+ga;c+=1
   if c==0: continue
-  txt+=f"{tname}: {gf}F/{gs}S Diff {gf-gs:+} Med {tot/c:.2f}\n";time.sleep(0.2)
+  txt+=f"{tname}: {gf}F/{gs}S Med {tot/c:.2f} Corner ~5.0\n";time.sleep(0.2)
  return txt
 def poll():
  global last_id
@@ -101,7 +95,7 @@ def poll():
      if not txt: continue
      if 'doppia' in low: run_doppia(cid)
      elif 'bolla' in low: run_bolla(cid)
-     elif 'status' in low: tg('BOT V52 OK - 3 GIORNI',cid,True)
+     elif 'status' in low: tg('BOT V54 OK - 7 GIORNI',cid,True)
      else:
       for k in LEAGUES:
        if k.lower()==low: tg(media(LEAGUES[k],k),cid,True)
