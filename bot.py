@@ -1,141 +1,247 @@
 import os,time,requests,threading,json
 from flask import Flask
 from datetime import datetime,timezone,timedelta
+from zoneinfo import ZoneInfo
+BOT=os.getenv('BOT_TOKEN');CHAT=os.getenv('CHAT_ID');KEY=os.getenv('API_FOOTBALL_KEY')
+ITALY=timezone(timedelta(hours=2));ROME=ZoneInfo("Europe/Rome")
+is_paused=False;last_id=0;av_g={};av_s=set();av_s_first=set();last_bolla_hour=-1;last_doppia_hour=-1
 
-BOT_TOKEN=os.getenv("BOT_TOKEN")
-CHAT_ID=os.getenv("CHAT_ID")
-API_FOOTBALL_KEY=os.getenv("API_FOOTBALL_KEY")
-ITALY=timezone(timedelta(hours=2))
+TOP_LEAGUES={'Italy':135,'England':39,'Spain':140,'Germany':78,'France':61,'Netherlands':88,'Portugal':94,'Belgium':144,'Turkey':203,'Scotland':179,'Austria':218,'Switzerland':207,'Denmark':106,'Sweden':113,'Norway':103,'Poland':107,'Czech Republic':345,'Croatia':210,'Serbia':286,'Greece':197,'Romania':283,'Bulgaria':172,'Hungary':271,'Slovakia':332,'Slovenia':373,'Ireland':344,'Wales':110,'Finland':244,'Iceland':164,'Cyprus':318,'Malta':389,'Luxembourg':261,'Belarus':116,'Russia':235}
 
-is_paused=False;last_update_id=0;av_g={};av_s=set();pre=set();pre1=set();cache={}
-
-TOP33={"Italia":135,"Inghilterra":39,"Spagna":140,"Germania":78,"Francia":61,"Portogallo":94,"Olanda":88,"Belgio":144,"Turchia":203,"Scozia":179,"Austria":218,"Svizzera":207,"Danimarca":119,"Svezia":113,"Norvegia":103,"Polonia":106,"Rep Ceca":110,"Croazia":210,"Serbia":286,"Grecia":197}
-ALLOWED=set(list(TOP33.values())+[136,40,140,78,61,88,94,144,203])
-
-try:requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true",timeout=10)
-except:pass
+def is_youth_league(name):
+    n=name.lower()
+    bad=['u19','u21','u23','u17','women',' w ','female','youth','reserve','development','academy',' u18',' u20']
+    return any(x in n for x in bad)
 
 app=Flask(__name__)
 @app.route('/')
-def home():return "V74 LIVE WORLD + BOLLA EU - OK",200
-threading.Thread(target=lambda: app.run(host='0.0.0.0',port=int(os.environ.get("PORT",10000))),daemon=True).start()
+def home():return f'BOT V33 STATS 35 - {datetime.now(ITALY).strftime("%H:%M")}',200
 
-TASTIERA_JSON=json.dumps({"keyboard":[
-["🟢 ACCENDI","🔴 SPEGNI"],
+TAST=json.dumps({"keyboard":[
 ["Serie A","Serie B","Inghilterra"],
 ["Spagna","Germania","Francia"],
-["LIVE","RIPARTITE"],
-["PRIMO TEMPO","PREPARATI E SEGNA"],
-["DOPPIA 90%","BOLLA EUROPA 33 NAZIONI"],
-["🎫 BOLLA","📊 STATUS"],
+["Olanda","Portogallo","Turchia"],
+["DOPPIA ALTA %"],
+["BOLLA EUROPA 33 NAZIONI"],
+["📊 STATISTICHE 35 NAZIONI"],
+["MODELLO AMERICANO 33"],
+["STATUS"],
+["ACCENDI","SPEGNI"],
 ["❌ CHIUDI MENU"]
 ],"resize_keyboard":True,"is_persistent":False})
-TASTIERA_CHIUSA=json.dumps({"keyboard":[["🎮 APRI MENU"]],"resize_keyboard":True,"is_persistent":False})
 
-def tg(m,cid=None,k=False,chiusa=False):
+TAST_CHIUSA=json.dumps({"keyboard":[["🎮 APRI MENU"]],"resize_keyboard":True,"is_persistent":False})
+
+def tg(m,cid=None,keys=False,chiusa=False):
  try:
-  cid=cid or CHAT_ID
-  url=f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-  pay={"chat_id":cid,"text":m,"parse_mode":"HTML"}
-  if k: pay["reply_markup"]=json.loads(TASTIERA_CHIUSA if chiusa else TASTIERA_JSON)
-  requests.post(url,json=pay,timeout=25)
+  cid=cid or CHAT
+  if not cid or not BOT:return
+  base=f'https://api.telegram.org/bot{BOT}';pay={'chat_id':cid,'text':m,'parse_mode':'HTML'}
+  if keys: pay['reply_markup']=json.loads(TAST_CHIUSA if chiusa else TAST)
+  requests.post(base+'/sendMessage',json=pay,timeout=25)
  except:pass
 
-def api_get(u):
+def api(url):
  try:
-  r=requests.get(u,headers={"x-apisports-key":API_FOOTBALL_KEY},timeout=30)
-  if r.status_code==429:return "LIMIT"
-  return r.json().get("response",[])
+  r=requests.get(url,headers={'x-apisports-key':KEY},timeout=30)
+  if r.status_code==429:return 'LIMIT'
+  return r.json().get('response',[])
  except:return []
 
-def get_stat(a,n):
- for s in a:
-  if s.get('type')==n:
-   try:return int(str(s.get('value') or 0).replace('%','') or 0)
-   except:return 0
- return 0
-def get_flag(p):return {"Italy":"🇮🇹","England":"🇬🇧","Spain":"🇪🇸","Germany":"🇩🇪","France":"🇫🇷"}.get(p,f"[{p}]")
+def media(league_id,name,cid=None):
+ txt=f"{name.upper()} - {datetime.now(ITALY).strftime('%d/%m %H:%M')}\n\n"
+ teams=api(f'https://v3.football.api-sports.io/teams?league={league_id}&season=2024')
+ if not teams or teams=='LIMIT':return 'Errore API o limite'
+ for t in teams[:14]:
+  tid=t['team']['id'];tname=t['team']['name']
+  last=api(f'https://v3.football.api-sports.io/fixtures?team={tid}&last=10&season=2024')
+  if not last or last=='LIMIT':time.sleep(0.5);continue
+  tot=0;c=0
+  for p in last:
+   gh=p['goals']['home'];ga=p['goals']['away']
+   if gh is None:continue
+   tot+=gh+ga;c+=1
+  if c==0:continue
+  med=tot/c
+  txt+=("PIU DI 2" if med>2 else "MENO DI 2")+f" - {tname}: {med:.2f}\n"
+  time.sleep(0.35)
+ return txt
 
-def crea_bolla():
+def media_tutte_35(cid):
+    tg(f"⏳ PARTITO STATISTICHE 35 NAZIONI\nCi metto 4-5 minuti, ti mando 1 messaggio per nazione\nInizio da Italia...",cid,True)
+    for country, lid in TOP_LEAGUES.items():
+        try:
+            if is_youth_league(country):continue
+            res = media(lid, f"{country} - ID {lid}", cid)
+            tg(res, cid, True)
+            time.sleep(2)
+        except Exception as e:
+            tg(f"Errore {country}: {e}", cid, True)
+    tg("✅ FINITO STATISTICHE 35 NAZIONI",cid,True)
+
+def get_double_chance(fid):
  try:
-  OGGI=datetime.now(ITALY).strftime("%Y-%m-%d")
-  fixtures=api_get(f"https://v3.football.api-sports.io/fixtures?date={OGGI}")
-  fixtures=[g for g in fixtures if g['league']['id'] in ALLOWED] # SOLO EUROPA
-  if not fixtures:return "Nessuna partita Europa oggi"
-  picks=[];quota_tot=1.0
-  for p in sorted(fixtures,key=lambda x:x["fixture"]["timestamp"]):
-   if len(picks)>=10 or quota_tot>=3.35:break
-   fid=p["fixture"]["id"];dt=datetime.fromtimestamp(p["fixture"]["timestamp"],tz=ITALY)
-   if dt<datetime.now(ITALY):continue
-   home=p['teams']['home']['name'];away=p['teams']['away']['name'];paese=p['league']['country'];lega=p['league']['name'];orario=dt.strftime("%H:%M")
-   odds=api_get(f"https://v3.football.api-sports.io/odds?fixture={fid}")
-   if not odds or odds=="LIMIT" or not odds[0].get("bookmakers"):continue
-   best=None
-   for bet in odds[0]["bookmakers"][0]["bets"]:
-    if "First Half" in bet["name"] or "Corners" in bet["name"] or "Cards" in bet["name"]:continue
-    for v in bet["values"]:
-     try:
-      q=float(v["odd"])
-      if 1.08<=q<=1.30 and (best is None or q>best["q"]):best={"e":v["value"],"q":q}
-     except:continue
-   if not best or quota_tot*best["q"]>3.45:continue
-   quota_tot*=best["q"];picks.append(f"🕐 {orario} 📍 {paese} - {lega}\n{home} vs {away}\n👉 {best['e']} + Multigol 1-5 @ {best['q']*1.25:.2f}")
-  return f"🔥 BOLLA EUROPA 33 - Quota {quota_tot:.2f}\n\n"+"\n\n".join(picks) if len(picks)>=5 else f"Poche partite Europa: {len(picks)}"
- except Exception as e:return f"Errore: {e}"
+  data=api(f'https://v3.football.api-sports.io/odds?fixture={fid}')
+  if not data or data=='LIMIT':return None
+  for book in data[0].get('bookmakers',[])[:3]:
+   for bet in book.get('bets',[]):
+    if 'Double Chance' in bet['name']:
+     best=None;best_odd=10
+     for v in bet['values']:
+      try:
+       odd=float(v['odd'])
+       if odd<best_odd:best_odd=odd;best=v['value']
+      except:continue
+     if best:
+      if 'Home/Draw' in best:return f"1X @ {best_odd}"
+      if 'Draw/Away' in best:return f"X2 @ {best_odd}"
+      if 'Home/Away' in best:return f"12 @ {best_odd}"
+ except:pass
+ return None
 
-def poll_commands():
- global is_paused,last_update_id
+def get_over_15(fid):
+ try:
+  data=api(f'https://v3.football.api-sports.io/odds?fixture={fid}')
+  if not data or data=='LIMIT':return None
+  for book in data[0].get('bookmakers',[])[:3]:
+   for bet in book.get('bets',[]):
+    if 'Goals Over/Under' in bet['name'] or 'Over/Under' in bet['name']:
+     for v in bet['values']:
+      if 'Over 1.5' in v['value']:
+       try:return float(v['odd'])
+       except:continue
+ except:pass
+ return None
+
+def get_fixtures_today():
+ today=datetime.now(ROME).strftime('%Y-%m-%d')
+ return api(f'https://v3.football.api-sports.io/fixtures?date={today}')
+
+def run_bolla(cid=None,auto=False):
+ data=get_fixtures_today()
+ if not data or data=='LIMIT':
+  if not auto:tg('BOLLA: Limite API',cid,True)
+  return
+ sel=[]
+ if not auto:tg('⏳ Cerco SOLO TOP LEAGUE + DOPPIA PIU ALTA... 30 sec',cid,True)
+ for country,top_id in TOP_LEAGUES.items():
+  found=None
+  for f in data:
+   if f['league']['id']==top_id and f['league']['country']==country:
+    if is_youth_league(f['league']['name']):continue
+    if f['fixture']['status']['short']!='NS':continue
+    found=f;break
+  if not found:continue
+  fid=found['fixture']['id'];ora=found['fixture']['date'][11:16];home=found['teams']['home']['name'];away=found['teams']['away']['name'];league=found['league']['name']
+  dc=get_double_chance(fid)
+  if not dc:dc="1X (no quota)"
+  else:time.sleep(0.6)
+  sel.append(f"{ora} {home} vs {away} -> {dc} ({league} - {country})")
+  if len(sel)>=35:break
+ if not sel:
+  if not auto:tg('Oggi nessuna TOP LEAGUE in programma (pre-match)',cid,True)
+  return
+ tg(f"🌍 BOLLA EUROPA {len(sel)} NAZIONI\n\n" + '\n'.join([f"{i+1}. {m}" for i,m in enumerate(sel)]),cid,True)
+
+def run_doppia(cid=None,auto=False):
+    data=get_fixtures_today()
+    if not data or data=='LIMIT':
+        if not auto:tg('DOPPIA: Limite API',cid,True)
+        return
+    out=[]
+    if not auto:tg('⏳ Cerco OVER 1.5 PIU SICURI...',cid,True)
+    for f in data:
+        try:
+            if f['league']['country'] not in TOP_LEAGUES:continue
+            if is_youth_league(f['league']['name']):continue
+            if f['fixture']['status']['short']!='NS':continue
+            if f['league']['id']!=TOP_LEAGUES.get(f['league']['country']):continue
+            fid=f['fixture']['id']
+            over_odd=get_over_15(fid)
+            if over_odd is None or over_odd>1.55:continue
+            ora=f['fixture']['date'][11:16];home=f['teams']['home']['name'];away=f['teams']['away']['name'];league=f['league']['name']
+            out.append(f"{ora} {home} vs {away} -> OVER 1.5 @ {over_odd} ({league})")
+            time.sleep(0.6)
+            if len(out)>=15:break
+        except:continue
+    if not out:
+        if not auto:tg('🔥 Oggi nessun OVER 1.5 <1.55',cid,True)
+        return
+    tg(f"🔥 DOPPIA {len(out)} OVER 1.5 SICURI\n\n" + '\n'.join([f"{i+1}. {m}" for i,m in enumerate(out)]),cid,True)
+
+def poll():
+ global is_paused,last_id
+ try:
+  if BOT:requests.get(f'https://api.telegram.org/bot{BOT}/deleteWebhook?drop_pending_updates=true',timeout=10)
+ except:pass
  while True:
   try:
-   r=requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={last_update_id+1}&timeout=25",timeout=35).json()
-   if r.get("ok"):
-    for upd in r.get("result",[]):
-     last_update_id=upd["update_id"];txt=(upd.get("message",{}).get("text") or "").strip();low=txt.lower();cid=upd.get("message",{}).get("chat",{}).get("id")
-     if "chiudi menu" in low:tg("✅ Menu chiuso - Clicca 🎮 APRI MENU",cid,True,True);continue
-     elif "apri menu" in low:tg("✅ Menu aperto - LIVE = MONDO, BOLLA = EUROPA",cid,True,False);continue
-     elif "spegni" in low:is_paused=True;tg("🛑 PAUSA",cid,True)
-     elif "accendi" in low or low=="/start":is_paused=False;tg("✅ BOT RIPRESO\n🌍 LIVE = TUTTO IL MONDO\n🇪🇺 BOLLA = SOLO EUROPA 33",cid,True)
-     elif "status" in low:tg(f"📊 ATTIVO {datetime.now(ITALY).strftime('%H:%M')}\n🌍 LIVE: WORLD\n🇪🇺 BOLLA: EUROPA 33",cid,True)
-     elif "bolla europa" in low or "bolla" in low or "doppia" in low:tg("⏳ Creo bolla SOLO EUROPA...",cid);tg(crea_bolla(),cid,True)
+   if not BOT:time.sleep(60);continue
+   base=f'https://api.telegram.org/bot{BOT}';url=base+f'/getUpdates?offset={last_id+1}&timeout=20'
+   r=requests.get(url,timeout=30).json()
+   if r.get('ok'):
+    for u in r.get('result',[]):
+     last_id=u['update_id'];msg=u.get('message',{});txt=(msg.get('text') or '').strip();low=txt.lower();cid=msg.get('chat',{}).get('id')
+     if not txt:continue
+     if 'chiudi menu' in low:tg('✅ Menu chiuso',cid,True,True);continue
+     elif 'apri menu' in low:tg('✅ Menu aperto',cid,True,False);continue
+     elif 'spegni' in low:is_paused=True;tg('⏸️ PAUSA',cid,True);continue
+     elif 'accendi' in low or '/start' in low:is_paused=False;tg('▶️ V33 ATTIVO - 35 NAZIONI',cid,True);continue
+     elif 'statistiche 35' in low or 'stat 35' in low:
+         threading.Thread(target=media_tutte_35,args=(cid,),daemon=True).start()
+         continue
+     elif 'status' in low:tg(f'STATUS V33 - {datetime.now(ITALY).strftime("%H:%M")}',cid,True);continue
+     elif 'doppia' in low:run_doppia(cid);continue
+     elif 'bolla' in low or 'americano' in low:run_bolla(cid);continue
   except:pass
   time.sleep(2)
-threading.Thread(target=poll_commands,daemon=True).start()
 
-# LOOP LIVE = TUTTO IL MONDO - NON FILTRO
-while True:
- try:
-  if is_paused:time.sleep(30);continue
-  now=datetime.now(ITALY)
-  if 0<=now.hour<10:
-   if now.hour==0:av_s.clear();pre.clear();pre1.clear();av_g.clear();cache.clear()
-   time.sleep(300);continue
-  live=api_get("https://v3.football.api-sports.io/fixtures?live=all")
-  if live=="LIMIT" or not live:time.sleep(60);continue
-  # NON FILTRO - LIVE MONDO
-  for g in live:
-   fid=g["fixture"]["id"];m=g["fixture"]["status"]["elapsed"];st=g["fixture"]["status"]["short"]
-   if m is None or fid in av_s:continue
-   home=g['teams']['home']['name'];away=g['teams']['away']['name'];gh=g['goals']['home'];ga=g['goals']['away']
-   paese=g['league']['country'];lega=g['league']['name'];flag=get_flag(paese);pref=f"{flag} {paese.upper()} - {lega}"
-   def stats_live():
-    d=cache.get(fid)
-    if not d or time.time()-d.get('time',0)>180:
-     s=api_get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
-     if s and len(s)>=2:
-      sot=get_stat(s[0]['statistics'],'Shots on Goal')+get_stat(s[1]['statistics'],'Shots on Goal')
-      corn=get_stat(s[0]['statistics'],'Corner Kicks')+get_stat(s[1]['statistics'],'Corner Kicks')
-      cache[fid]={'sot':sot,'corn':corn,'time':time.time()};time.sleep(0.3);return sot,corn
-     return d.get('sot',0),d.get('corn',0) if d else (0,0)
-    return d.get('sot',0),d.get('corn',0)
-   if st=="HT" and fid not in pre1:
-    so,co=stats_live()
-    if so>=3:tg(f"⏸️ FINE 1T {pref} | Tiri:{so} Corner:{co} | {home} {gh}-{ga} {away}");pre1.add(fid)
-   if 46<=(m or 0)<=69 and fid not in pre:
-    so,co=stats_live()
-    if so>=5 or co>=6:tg(f"🔔 PREPARATI {m}' {pref} | Tiri:{so} Corner:{co} | {home} {gh}-{ga} {away}");pre.add(fid)
-   if 65<=(m or 0)<=92:
-    so,co=stats_live()
-    if (so>=4 or co>=7) and fid not in av_s:
-     sq=home if gh<=ga else away;tg(f"🔥 GIOCALO {m}' >85% {pref} | Tiri:{so} Corner:{co} | {home} {gh}-{ga} {away} | NEXT {sq}");av_s.add(fid);av_g[fid]=gh+ga
-  time.sleep(45)
- except:time.sleep(15)
+def live_loop():
+ tg('✅ BOT V33 ATTIVO\n📊 NUOVO TASTO: STATISTICHE 35 NAZIONI\n🌍 LIVE MONDO\n🇪🇺 BOLLA 35',None,True)
+ while True:
+  try:
+   if is_paused:time.sleep(30);continue
+   now=datetime.now(ITALY)
+   if 2<=now.hour<6:time.sleep(300);continue
+   games=api('https://v3.football.api-sports.io/fixtures?live=all')
+   if games=='LIMIT':time.sleep(3600);continue
+   if not games:time.sleep(60);continue
+   for g in games:
+    fid=g['fixture']['id'];m=g['fixture']['status']['elapsed']
+    if m is None:continue
+    home=g['teams']['home']['name'];away=g['teams']['away']['name'];gh=g['goals']['home'];ga=g['goals']['away']
+    if 30<=m<=45 and fid not in av_s_first:
+     st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}');sot=0;corn=0
+     if st and len(st)>=2:
+      for s in st:
+       for x in s['statistics']:
+        if 'Shots on Goal' in x['type']:
+         try:sot+=int(str(x['value'] or 0))
+         except:pass
+        if 'Corner' in x['type']:
+         try:corn+=int(str(x['value'] or 0))
+         except:pass
+     if sot>=2:tg(f"🔥 PRIMO TEMPO {m}' {g['league']['country']} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{corn}");av_s_first.add(fid)
+    if 65<=m<=90 and fid not in av_s:
+     st=api(f'https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}');sot=0;corn=0
+     if st and len(st)>=2:
+      for s in st:
+       for x in s['statistics']:
+        if 'Shots on Goal' in x['type']:
+         try:sot+=int(str(x['value'] or 0))
+         except:pass
+        if 'Corner' in x['type']:
+         try:corn+=int(str(x['value'] or 0))
+         except:pass
+     if sot>=4 or corn>=6:tg(f"🚀 GIOCALO {m}' {g['league']['country']} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{corn}");av_s.add(fid);av_g[fid]=gh+ga
+   for g in games:
+    fid=g['fixture']['id']
+    if fid in av_g:
+     tot=g['goals']['home']+g['goals']['away']
+     if tot>av_g[fid]:tg(f"✅ GOAL VINTO! {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}");del av_g[fid]
+   time.sleep(60)
+  except Exception as e:print(e);time.sleep(15)
+
+threading.Thread(target=poll,daemon=True).start()
+threading.Thread(target=live_loop,daemon=True).start()
+if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)))
