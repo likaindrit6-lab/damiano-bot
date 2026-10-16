@@ -28,7 +28,7 @@ def is_youth_league(name):
 app=Flask(__name__)
 @app.route('/')
 def home():
-    return "BOT V38 ULTRA FIX 2 - " + datetime.now(ITALY).strftime("%H:%M"),200
+    return "BOT V38 ULTRA - " + datetime.now(ITALY).strftime("%H:%M"),200
 
 TAST=json.dumps({"keyboard":[
 ["Serie A","Serie B","Inghilterra"],
@@ -50,11 +50,11 @@ def tg(m,cid=None,keys=False,chiusa=False):
   cid=cid or CHAT
   if not cid or not BOT:
    return
-  base="https://api.telegram.org/bot" + BOT
+  base_tg="https://api.telegram.org/bot" + BOT
   pay={'chat_id':cid,'text':m,'parse_mode':'HTML'}
   if keys:
    pay['reply_markup']=json.loads(TAST_CHIUSA if chiusa else TAST)
-  requests.post(base+'/sendMessage',json=pay,timeout=25)
+  requests.post(base_tg+'/sendMessage',json=pay,timeout=25)
  except:
   pass
 
@@ -150,8 +150,7 @@ def media_tutte_35(cid):
     tg("PARTITO STATS 35 NAZIONI",cid,True)
     for country, lid in TOP_LEAGUES.items():
         try:
-            res=media(lid, country)
-            tg(res,cid,True)
+            tg(media(lid,country),cid,True)
         except:
             pass
     tg("FINITO STATS 35",cid,True)
@@ -193,242 +192,4 @@ def media_angoli(league_id,name):
   txt+="Nessuna +6 in " + name + "\n"
  return txt
 
-def media_tutte_angoli(cid):
-    tg("PARTITO ANGOLI +6 - 35 NAZIONI",cid,True)
-    for country, lid in TOP_LEAGUES.items():
-        try:
-            res=media_angoli(lid, country)
-            tg(res,cid,True)
-        except Exception as e:
-            tg("Errore " + country + ": " + str(e),cid,True)
-    tg("FINITO ANGOLI +6 ULTRA",cid,True)
-
-def get_double_chance(fid):
- try:
-  url="https://v3.football.api-sports.io/odds?fixture=" + str(fid)
-  data=api(url)
-  if not data or data=='LIMIT':
-   return None
-  for book in data[0].get('bookmakers',[])[:3]:
-   for bet in book.get('bets',[]):
-    if 'Double Chance' in bet['name']:
-     best=None
-     best_odd=10
-     for v in bet['values']:
-      try:
-       odd=float(v['odd'])
-       if odd<best_odd:
-        best_odd=odd
-        best=v['value']
-      except:
-       continue
-     if best:
-      if 'Home/Draw' in best:
-       return "1X @ " + str(best_odd)
-      if 'Draw/Away' in best:
-       return "X2 @ " + str(best_odd)
-      if 'Home/Away' in best:
-       return "12 @ " + str(best_odd)
- except:
-  pass
- return None
-
-def get_over_15(fid):
- try:
-  url="https://v3.football.api-sports.io/odds?fixture=" + str(fid)
-  data=api(url)
-  if not data or data=='LIMIT':
-   return None
-  for book in data[0].get('bookmakers',[])[:3]:
-   for bet in book.get('bets',[]):
-    if 'Over/Under' in bet['name']:
-     for v in bet['values']:
-      if 'Over 1.5' in v['value']:
-       try:
-        return float(v['odd'])
-       except:
-        continue
- except:
-  pass
- return None
-
-def get_fixtures_today():
- today=datetime.now(ROME).strftime('%Y-%m-%d')
- url="https://v3.football.api-sports.io/fixtures?date=" + today
- return api(url)
-
-def run_bolla(cid=None,auto=False):
- data=get_fixtures_today()
- if not data or data=='LIMIT':
-  return
- sel=[]
- if not auto:
-  tg("Cerco BOLLA EUROPA...",cid,True)
- for country,top_id in TOP_LEAGUES.items():
-  found=None
-  for f in data:
-   if f['league']['id']==top_id and f['league']['country']==country:
-    if is_youth_league(f['league']['name']):
-     continue
-    if f['fixture']['status']['short']!='NS':
-     continue
-    found=f
-    break
-  if not found:
-   continue
-  fid=found['fixture']['id']
-  ora=found['fixture']['date'][11:16]
-  home=found['teams']['home']['name']
-  away=found['teams']['away']['name']
-  league=found['league']['name']
-  dc=get_double_chance(fid) or "1X"
-  sel.append(ora + " " + home + " vs " + away + " -> " + dc + " (" + league + ")")
-  if len(sel)>=35:
-   break
- if sel:
-  txt="BOLLA " + str(len(sel)) + " NAZIONI\n\n"
-  for i,m in enumerate(sel):
-   txt+=str(i+1) + ". " + m + "\n"
-  tg(txt,cid,True)
-
-def run_doppia(cid=None,auto=False):
-    data=get_fixtures_today()
-    if not data or data=='LIMIT':
-     return
-    out=[]
-    if not auto:
-     tg("Cerco OVER 1.5...",cid,True)
-    for f in data:
-        try:
-            if f['league']['country'] not in TOP_LEAGUES:
-             continue
-            if is_youth_league(f['league']['name']):
-             continue
-            if f['fixture']['status']['short']!='NS':
-             continue
-            if f['league']['id']!=TOP_LEAGUES.get(f['league']['country']):
-             continue
-            fid=f['fixture']['id']
-            over_odd=get_over_15(fid)
-            if over_odd is None or over_odd>1.55:
-             continue
-            ora=f['fixture']['date'][11:16]
-            home=f['teams']['home']['name']
-            away=f['teams']['away']['name']
-            league=f['league']['name']
-            out.append(ora + " " + home + " vs " + away + " -> OVER 1.5 @ " + str(over_odd) + " (" + league + ")")
-            if len(out)>=15:
-             break
-        except:
-         continue
-    if out:
-     txt="DOPPIA " + str(len(out)) + " OVER 1.5\n\n"
-     for i,m in enumerate(out):
-      txt+=str(i+1) + ". " + m + "\n"
-     tg(txt,cid,True)
-
-def poll():
- global is_paused,last_id
- try:
-  if BOT:
-   requests.get("https://api.telegram.org/bot" + BOT + "/deleteWebhook?drop_pending_updates=true",timeout=10)
- except:
-  pass
- while True:
-  try:
-   if not BOT:
-    time.sleep(60)
-    continue
-   base="https://api.telegram.org/bot" + BOT
-   url=base + "/getUpdates?offset=" + str(last_id+1) + "&timeout=20"
-   r=requests.get(url,timeout=30).json()
-   if r.get('ok'):
-    for u in r.get('result',[]):
-     last_id=u['update_id']
-     msg=u.get('message',{})
-     txt=(msg.get('text') or '').strip()
-     low=txt.lower()
-     cid=msg.get('chat',{}).get('id')
-     if not txt:
-      continue
-     if 'chiudi menu' in low:
-      tg('Menu chiuso',cid,True,True)
-      continue
-     elif 'apri menu' in low:
-      tg('Menu aperto V38 ULTRA FIX 2',cid,True,False)
-      continue
-     elif 'spegni' in low:
-      is_paused=True
-      tg('PAUSA',cid,True)
-      continue
-     elif 'accendi' in low or '/start' in low:
-      is_paused=False
-      tg('V38 ULTRA FIX 2 ATTIVO',cid,True)
-      continue
-     elif 'angolo' in low:
-         threading.Thread(target=media_tutte_angoli,args=(cid,),daemon=True).start()
-         continue
-     elif 'statistiche 35' in low:
-         threading.Thread(target=media_tutte_35,args=(cid,),daemon=True).start()
-         continue
-     elif 'status' in low:
-      tg("STATUS V38 ULTRA - " + datetime.now(ITALY).strftime("%H:%M"),cid,True)
-      continue
-     elif 'doppia' in low:
-      run_doppia(cid)
-      continue
-     elif 'bolla' in low:
-      run_bolla(cid)
-      continue
-  except:
-   pass
-  time.sleep(1)
-
-def live_loop():
- tg('BOT V38 ULTRA FIX 2 ATTIVO - GOAL SFIGATA 4.50+ - ANGOLI +6 - 450/min',None,True)
- while True:
-  try:
-   if is_paused:
-    time.sleep(10)
-    continue
-   now=datetime.now(ITALY)
-   if 2<=now.hour<6:
-    time.sleep(120)
-    continue
-   games=api('https://v3.football.api-sports.io/fixtures?live=all')
-   if games=='LIMIT':
-    time.sleep(20)
-    continue
-   if not games:
-    time.sleep(15)
-    continue
-   for g in games:
-    fid=g['fixture']['id']
-    m=g['fixture']['status']['elapsed']
-    if m is None:
-     continue
-    home=g['teams']['home']['name']
-    away=g['teams']['away']['name']
-    gh=g['goals']['home']
-    ga=g['goals']['away']
-    if fid not in av_score:
-     av_score[fid]=(gh,ga)
-    else:
-     old_h,old_a=av_score[fid]
-     if gh!=old_h or ga!=old_a:
-      chi='HOME' if gh>old_h else 'AWAY'
-      av_score[fid]=(gh,ga)
-      sfiga=get_sfigata(fid)
-      if sfiga:
-       tipo_sfiga,quota_sfiga,tipo_favo,quota_favo=sfiga
-       if chi==tipo_sfiga:
-        nome_sfiga=home if tipo_sfiga=='HOME' else away
-        nome_favo=away if tipo_sfiga=='HOME' else home
-        country=g['league']['country']
-        msg="GOAL SFIGATA " + str(m) + "' " + country + " " + home + " " + str(gh) + "-" + str(ga) + " " + away + "\n"
-        msg+="Sfigata " + nome_sfiga + " @" + str(quota_sfiga) + " segna!\n"
-        msg+="Favorita " + nome_favo + " @" + str(quota_favo) + " sotto\n"
-        msg+="RIGIOCA SUBITO GOL FAVORITA / OVER"
-        tg(msg)
-    if 30<=m<=45 and fid not in av_s_first:
-     url="https://v3.football.api-s
+def media_tutte_angoli(cid
