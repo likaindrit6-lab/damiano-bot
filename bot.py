@@ -123,25 +123,38 @@ def run_bolla(cid=None,auto=False):
   if not auto: tg("BOLLA: Limite API",cid,True)
   return
  sel=[]
- if not auto: tg("Cerco TOP LEAGUE...",cid,True)
- for country,top_id in TOP_LEAGUES.items():
-  found=None
-  for f in data:
-   if f.get("league",{}).get("id")==top_id and f.get("league",{}).get("country")==country:
-    if is_youth_league(f.get("league",{}).get("name","")): continue
-    if f.get("fixture",{}).get("status",{}).get("short")!="NS": continue
-    found=f; break
-  if not found: continue
-  ora=str(found.get("fixture",{}).get("date",""))[11:16]
-  home=found.get("teams",{}).get("home",{}).get("name")
-  away=found.get("teams",{}).get("away",{}).get("name")
-  dc=get_double_chance(found.get("fixture",{}).get("id")) or "1X"
-  sel.append(ora+" "+home+" vs "+away+" -> "+dc)
-  if len(sel)>=35: break
+ oggi=datetime.now(ROME).strftime("%Y-%m-%d")
+ now_rome=datetime.now(ROME)
+ if not auto: tg(f"Cerco BOLLA ALTA 90% {oggi} fino a mezzanotte...",cid,True)
+ for f in data:
+  try:
+   fdate=str(f.get("fixture",{}).get("date",""))[:10]
+   if fdate != oggi: continue
+   country=f.get("league",{}).get("country")
+   if country not in TOP_LEAGUES: continue
+   if f.get("league",{}).get("id") != TOP_LEAGUES.get(country): continue
+   if is_youth_league(f.get("league",{}).get("name","")): continue
+   if f.get("fixture",{}).get("status",{}).get("short")!="NS": continue
+   # solo da adesso fino a mezzanotte
+   f_dt=datetime.fromisoformat(str(f.get("fixture",{}).get("date","")).replace("Z","+00:00")).astimezone(ROME)
+   if f_dt < now_rome: continue
+   fid=f.get("fixture",{}).get("id")
+   dc=get_double_chance(fid)
+   if not dc: continue
+   try: q=float(dc.split("@")[1].strip())
+   except: continue
+   if q>1.40: continue
+   ora=f_dt.strftime("%H:%M")
+   home=f.get("teams",{}).get("home",{}).get("name")
+   away=f.get("teams",{}).get("away",{}).get("name")
+   sel.append(f"{ora} {home} vs {away} -> {dc}")
+   time.sleep(0.25)
+   if len(sel)>=35: break
+  except: continue
  if not sel:
-  if not auto: tg("Oggi nessuna TOP LEAGUE",cid,True)
+  if not auto: tg(f"Oggi {oggi} finite - 0 BOLLA ALTA fino a mezzanotte",cid,True)
   return
- out_txt="BOLLA EUROPA "+str(len(sel))+" NAZIONI\n\n"
+ out_txt=f"BOLLA ALTA 90% - {len(sel)} partite OGGI fino a mezzanotte\n\n"
  n=1
  for mm in sel:
      out_txt=out_txt+str(n)+". "+mm+"\n"; n+=1
@@ -256,24 +269,4 @@ def live_loop():
         t=x.get("type","")
         if "Shots on Goal" in t:
          try: sot+=int(str(x.get("value") or 0))
-         except: pass
-        if "corner" in t.lower():
-         try: corn+=int(str(x.get("value") or 0))
-         except: pass
-     if sot>=4 or corn>=6:
-        tg(f"GIOCALO {mm}' {home} {gh}-{ga} {away}"); av_s.add(fid); av_g[fid]=gh+ga
-   for g in games:
-    fid=g.get("fixture",{}).get("id")
-    if fid in av_g:
-     gh2=g.get("goals",{}).get("home"); ga2=g.get("goals",{}).get("away")
-     if gh2+ga2>av_g[fid]:
-         hn=g.get("teams",{}).get("home",{}).get("name"); an=g.get("teams",{}).get("away",{}).get("name")
-         tg(f"GOAL VINTO! {hn} {gh2}-{ga2} {an}"); del av_g[fid]
-   time.sleep(60)
-  except Exception as e:
-   print(e); time.sleep(15)
-
-threading.Thread(target=poll,daemon=True).start()
-threading.Thread(target=live_loop,daemon=True).start()
-if __name__=="__main__":
-    app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
+        
