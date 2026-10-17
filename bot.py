@@ -17,7 +17,7 @@ def is_youth_league(name):
 
 app=Flask(__name__)
 @app.route('/')
-def home():return f'BOT V41 BOTTONI OK - {datetime.now(ITALY).strftime("%H:%M")}',200
+def home():return f'BOT V41 FIX 343 OK - {datetime.now(ITALY).strftime("%H:%M")}',200
 
 TAST=json.dumps({"keyboard":[
 ["Serie A","Serie B","Inghilterra"],
@@ -32,27 +32,21 @@ TAST=json.dumps({"keyboard":[
 ["❌ CHIUDI MENU"]
 ],"resize_keyboard":True,"is_persistent":False})
 
-TAST_CHIUSA=json.dumps({"keyboard":[["🎮 APRI MENU"]],"resize_keyboard":True,"is_persistent":False})
+TAST_CHIUSA=json.dumps({"keyboard":[["\U0001f3ae APRI MENU"]],"resize_keyboard":True,"is_persistent":False})
 
 def tg(m,cid=None,keys=False,chiusa=False,home=None,away=None):
  try:
   cid=cid or CHAT
   if not cid or not BOT:return
   base=f'https://api.telegram.org/bot{BOT}'
-  
-  # SE HO HOME/AWAY -> MANDO BOTTONI CLICCABILI CHE NON VANNO IN HOMEPAGE
   if home and away:
       q = urllib.parse.quote_plus(f"{home} {away}")
       q2 = urllib.parse.quote_plus(f"{home} {away} quote live")
-      # Questi 3 link FUNZIONANO sempre dall'Italia
       inline_kb = {
           "inline_keyboard": [
               [
-                  {"text": "📊 LIVE SOFASCORE", "url": f"https://www.sofascore.com/search?q={q}"},
-                  {"text": "🔍 QUOTE LIVE", "url": f"https://www.google.com/search?q={q2}"}
-              ],
-              [
-                  {"text": "📈 ODDSPEDIA", "url": f"https://oddspedia.com/search/{q}"}
+                  {"text": "\U0001f4ca LIVE SOFASCORE", "url": f"https://www.sofascore.com/search?q={q}"},
+                  {"text": "\U0001f50d QUOTE LIVE", "url": f"https://www.google.com/search?q={q2}"}
               ]
           ]
       }
@@ -60,7 +54,6 @@ def tg(m,cid=None,keys=False,chiusa=False,home=None,away=None):
   else:
       pay={'chat_id':cid,'text':m,'parse_mode':'HTML'}
       if keys: pay['reply_markup']=json.loads(TAST_CHIUSA if chiusa else TAST)
-  
   requests.post(base+'/sendMessage',json=pay,timeout=25)
  except Exception as e:
   print(f"tg error {e}")
@@ -74,30 +67,30 @@ def api(url):
 
 def get_corners_fixture(fid):
  try:
-  u="https://v3.football.api-sports.io"+f"/fixtures/statistics?fixture={fid}"
+  u=f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}"
   stats=api(u)
   if not stats or stats=='LIMIT' or len(stats)<2:return None
   tot=0;found=False
   for team in stats:
-   for s in team['statistics']:
-    if 'corner' in s['type'].lower():
+   for s in team.get('statistics',[]):
+    if 'corner' in str(s.get('type','')).lower():
      try:
-      tot+=int(str(s['value'] or 0));found=True
+      tot+=int(str(s.get('value') or 0));found=True
      except:pass
   return tot if found else None
  except:return None
 
 def get_sfigata(fid):
  try:
-  u="https://v3.football.api-sports.io"+f"/odds?fixture={fid}"
+  u=f"https://v3.football.api-sports.io/odds?fixture={fid}"
   data=api(u)
   if not data or data=='LIMIT':return None
   for book in data[0].get('bookmakers',[])[:2]:
    for bet in book.get('bets',[]):
-    if bet['name']=='Match Winner':
+    if bet.get('name')=='Match Winner':
      q={}
-     for v in bet['values']:
-      try:q[v['value']]=float(v['odd'])
+     for v in bet.get('values',[]):
+      try:q[v.get('value')]=float(v.get('odd'))
       except:pass
      h=q.get('Home',0);a=q.get('Away',0)
      if h>=4.5 and h>a and a<=1.8:return ('HOME',h,'AWAY',a)
@@ -107,17 +100,17 @@ def get_sfigata(fid):
 
 def media(league_id,name):
  txt=f"{name.upper()} - {datetime.now(ITALY).strftime('%d/%m %H:%M')}\n\n"
- u="https://v3.football.api-sports.io"+f"/teams?league={league_id}&season=2024"
+ u=f"https://v3.football.api-sports.io/teams?league={league_id}&season=2024"
  teams=api(u)
  if not teams or teams=='LIMIT':return f'Errore API {name}'
  for t in teams[:14]:
-  tid=t['team']['id'];tname=t['team']['name']
-  uu="https://v3.football.api-sports.io"+f"/fixtures?team={tid}&last=10&season=2024"
+  tid=t.get('team',{}).get('id');tname=t.get('team',{}).get('name')
+  uu=f"https://v3.football.api-sports.io/fixtures?team={tid}&last=10&season=2024"
   last=api(uu)
   if not last or last=='LIMIT':time.sleep(0.4);continue
   tot=0;c=0
   for p in last:
-   gh=p['goals']['home'];ga=p['goals']['away']
+   gh=p.get('goals',{}).get('home');ga=p.get('goals',{}).get('away')
    if gh is None:continue
    tot+=gh+ga;c+=1
   if c==0:continue
@@ -138,22 +131,22 @@ def media_tutte_35(cid):
 
 def media_angoli(league_id,name):
  txt=f"🚩 {name.upper()} - CORNER MEDIA ULTIME 10\n{datetime.now(ITALY).strftime('%d/%m')}\n\n"
- u="https://v3.football.api-sports.io"+f"/teams?league={league_id}&season=2025"
+ u=f"https://v3.football.api-sports.io/teams?league={league_id}&season=2025"
  teams=api(u)
  if not teams or teams=='LIMIT':
-  uu="https://v3.football.api-sports.io"+f"/teams?league={league_id}&season=2024"
+  uu=f"https://v3.football.api-sports.io/teams?league={league_id}&season=2024"
   teams=api(uu)
  if not teams or teams=='LIMIT':return f'Errore API {name}'
  trovati=0
  for t in teams[:14]:
-  tid=t['team']['id'];tname=t['team']['name']
-  uu="https://v3.football.api-sports.io"+f"/fixtures?team={tid}&last=10"
+  tid=t.get('team',{}).get('id');tname=t.get('team',{}).get('name')
+  uu=f"https://v3.football.api-sports.io/fixtures?team={tid}&last=10"
   last=api(uu)
-  if not last or last=='LIMIT':time.sleep(0.4);continue
+  if not last or last=='LIMIT':time.sleep(0.4):continue
   tot_corners=0;c=0
   for p in last:
-   if p['fixture']['status']['short']!='FT':continue
-   fid=p['fixture']['id']
+   if p.get('fixture',{}).get('status',{}).get('short')!='FT':continue
+   fid=p.get('fixture',{}).get('id')
    corn=get_corners_fixture(fid)
    if corn is None:continue
    tot_corners+=corn;c+=1
@@ -181,17 +174,17 @@ def media_tutte_angoli(cid):
 
 def get_double_chance(fid):
  try:
-  u="https://v3.football.api-sports.io"+f"/odds?fixture={fid}"
+  u=f"https://v3.football.api-sports.io/odds?fixture={fid}"
   data=api(u)
   if not data or data=='LIMIT':return None
   for book in data[0].get('bookmakers',[])[:3]:
    for bet in book.get('bets',[]):
-    if 'Double Chance' in bet['name']:
+    if 'Double Chance' in bet.get('name',''):
      best=None;best_odd=10
-     for v in bet['values']:
+     for v in bet.get('values',[]):
       try:
-       odd=float(v['odd'])
-       if odd<best_odd:best_odd=odd;best=v['value']
+       odd=float(v.get('odd'))
+       if odd<best_odd:best_odd=odd;best=v.get('value')
       except:continue
      if best:
       if 'Home/Draw' in best:return f"1X @ {best_odd}"
@@ -202,142 +195,25 @@ def get_double_chance(fid):
 
 def get_over_15(fid):
  try:
-  u="https://v3.football.api-sports.io"+f"/odds?fixture={fid}"
+  u=f"https://v3.football.api-sports.io/odds?fixture={fid}"
   data=api(u)
   if not data or data=='LIMIT':return None
   for book in data[0].get('bookmakers',[])[:3]:
    for bet in book.get('bets',[]):
-    if 'Over/Under' in bet['name']:
-     for v in bet['values']:
-      if 'Over 1.5' in v['value']:
-       try:return float(v['odd'])
+    if 'Over/Under' in bet.get('name',''):
+     for v in bet.get('values',[]):
+      if 'Over 1.5' in v.get('value',''):
+       try:return float(v.get('odd'))
        except:continue
  except:pass
  return None
 
 def get_fixtures_today():
  today=datetime.now(ROME).strftime('%Y-%m-%d')
- u="https://v3.football.api-sports.io"+f"/fixtures?date={today}"
+ u=f"https://v3.football.api-sports.io/fixtures?date={today}"
  return api(u)
 
 def run_bolla(cid=None,auto=False):
  data=get_fixtures_today()
  if not data or data=='LIMIT':
-  if not auto:tg('BOLLA: Limite API',cid,True)
-  return
- sel=[]
- if not auto:tg('⏳ Cerco TOP LEAGUE + DOPPIA...',cid,True)
- for country,top_id in TOP_LEAGUES.items():
-  found=None
-  for f in data:
-   if f['league']['id']==top_id and f['league']['country']==country:
-    if is_youth_league(f['league']['name']):continue
-    if f['fixture']['status']['short']!='NS':continue
-    found=f;break
-  if not found:continue
-  fid=found['fixture']['id'];ora=found['fixture']['date'][11:16];home=found['teams']['home']['name'];away=found['teams']['away']['name'];league=found['league']['name']
-  dc=get_double_chance(fid) or "1X"
-  sel.append(f"{ora} {home} vs {away} -> {dc} ({league} - {country})")
-  if len(sel)>=35:break
- if not sel:
-  if not auto:tg('Oggi nessuna TOP LEAGUE in programma',cid,True)
-  return
- tg(f"🌍 BOLLA EUROPA {len(sel)} NAZIONI\n\n" + '\n'.join([f"{i+1}. {m}" for i,m in enumerate(sel)]),cid,True)
-
-def run_doppia(cid=None,auto=False):
-    data=get_fixtures_today()
-    if not data or data=='LIMIT':return
-    out=[]
-    if not auto:tg('⏳ Cerco OVER 1.5...',cid,True)
-    for f in data:
-        try:
-            if f['league']['country'] not in TOP_LEAGUES:continue
-            if is_youth_league(f['league']['name']):continue
-            if f['fixture']['status']['short']!='NS':continue
-            if f['league']['id']!=TOP_LEAGUES.get(f['league']['country']):continue
-            fid=f['fixture']['id']
-            over_odd=get_over_15(fid)
-            if over_odd is None or over_odd>1.55:continue
-            ora=f['fixture']['date'][11:16];home=f['teams']['home']['name'];away=f['teams']['away']['name'];league=f['league']['name']
-            out.append(f"{ora} {home} vs {away} -> OVER 1.5 @ {over_odd} ({league})")
-            time.sleep(0.4)
-            if len(out)>=15:break
-        except:continue
-    if out:tg(f"🔥 DOPPIA {len(out)} OVER 1.5\n\n" + '\n'.join([f"{i+1}. {m}" for i,m in enumerate(out)]),cid,True)
-    elif not auto:tg('🔥 Oggi nessun OVER 1.5 <1.55',cid,True)
-
-def poll():
- global is_paused,last_id
- try:
-  if BOT:requests.get(f'https://api.telegram.org/bot{BOT}/deleteWebhook?drop_pending_updates=true',timeout=10)
- except:pass
- while True:
-  try:
-   if not BOT:time.sleep(60);continue
-   base=f'https://api.telegram.org/bot{BOT}';url=base+f'/getUpdates?offset={last_id+1}&timeout=20'
-   r=requests.get(url,timeout=30).json()
-   if r.get('ok'):
-    for u in r.get('result',[]):
-     last_id=u['update_id'];msg=u.get('message',{});txt=(msg.get('text') or '').strip();low=txt.lower();cid=msg.get('chat',{}).get('id')
-     if not txt:continue
-     if 'chiudi menu' in low:tg('✅ Menu chiuso',cid,True,True);continue
-     elif 'apri menu' in low:tg('✅ Menu aperto V41',cid,True,False);continue
-     elif 'spegni' in low:is_paused=True;tg('⏸️ PAUSA',cid,True);continue
-     elif 'accendi' in low or '/start' in low:is_paused=False;tg('▶️ V41 ATTIVO - BOTTONI OK + FILTRO 4',cid,True);continue
-     elif 'angolo' in low or 'calcio d' in low:
-         threading.Thread(target=media_tutte_angoli,args=(cid,),daemon=True).start();continue
-     elif 'statistiche 35' in low:
-         threading.Thread(target=media_tutte_35,args=(cid,),daemon=True).start();continue
-     elif 'status' in low:tg(f'STATUS V41 - {datetime.now(ITALY).strftime("%H:%M")}',cid,True);continue
-     elif 'doppia' in low:run_doppia(cid);continue
-     elif 'bolla' in low:run_bolla(cid);continue
-  except:pass
-  time.sleep(2)
-
-def live_loop():
- tg('✅ BOT V41 ATTIVO\n📊 FILTRO 1T >=4\n⚽ SFIGATA SOLO PAREGGIO/VANTAGGIO\n🔗 BOTTONI CLICCABILI OK',None,True)
- while True:
-  try:
-   if is_paused:time.sleep(30);continue
-   now=datetime.now(ITALY)
-   if 2<=now.hour<6:time.sleep(300);continue
-   games=api('https://v3.football.api-sports.io'+'/fixtures?live=all')
-   if games=='LIMIT':time.sleep(3600);continue
-   if not games:time.sleep(60);continue
-   for g in games:
-    fid=g['fixture']['id'];m=g['fixture']['status']['elapsed']
-    if m is None:continue
-    home=g['teams']['home']['name'];away=g['teams']['away']['name'];gh=g['goals']['home'];ga=g['goals']['away']
-
-    if fid not in av_sfiga_score:
-     av_sfiga_score[fid]=(gh,ga)
-    else:
-     oh,oa=av_sfiga_score[fid]
-     if gh!=oh or ga!=oa:
-      chi='HOME' if gh>oh else 'AWAY'
-      av_sfiga_score[fid]=(gh,ga)
-      sf=get_sfigata(fid)
-      if sf:
-       tipo,qs,tf,qf=sf
-       if chi==tipo:
-        sfiga_gol = gh if tipo=='HOME' else ga
-        fav_gol = ga if tipo=='HOME' else gh
-        if sfiga_gol >= fav_gol:
-            ns=home if tipo=='HOME' else away
-            nf=away if tipo=='HOME' else home
-            co=g['league']['country']
-            stato = "PAREGGIA" if sfiga_gol == fav_gol else "VA IN VANTAGGIO"
-            txt=f"⚽ SFIGATA {stato} {m}' {co} {home} {gh}-{ga} {away}\n"
-            txt+=f"Sfigata {ns} @{qs} {stato.lower()}!\n"
-            txt+=f"Favorita {nf} @{qf} in difficoltà\n"
-            txt+=f"👉 RIGIOCA SUBITO GOL FAV / OVER"
-            tg(txt, home=home, away=away)
-
-    if 30<=m<=45 and fid not in av_s_first:
-     u="https://v3.football.api-sports.io"+f"/fixtures/statistics?fixture={fid}"
-     st=api(u);sot=0;corn=0
-     if st and len(st)>=2:
-      for s in st:
-       for x in s['statistics']:
-        if 'Shots on Goal' in x['type']:
-         try:sot+=int(str(x['value
+  if not auto:tg('BOLLA: Limite API
