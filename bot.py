@@ -6,7 +6,6 @@ from zoneinfo import ZoneInfo
 BOT=os.getenv('BOT_TOKEN');CHAT=os.getenv('CHAT_ID');KEY=os.getenv('API_FOOTBALL_KEY')
 ITALY=timezone(timedelta(hours=2));ROME=ZoneInfo("Europe/Rome")
 is_paused=False;last_id=0;av_g={};av_s=set();av_s_first=set()
-# AGGIUNTA SOLO PER SFIGATA
 av_sfiga_score={}
 
 TOP_LEAGUES={'Italy':135,'England':39,'Spain':140,'Germany':78,'France':61,'Netherlands':88,'Portugal':94,'Belgium':144,'Turkey':203,'Scotland':179,'Austria':218,'Switzerland':207,'Denmark':106,'Sweden':113,'Norway':103,'Poland':107,'Czech Republic':345,'Croatia':210,'Serbia':286,'Greece':197,'Romania':283,'Bulgaria':172,'Hungary':271,'Slovakia':332,'Slovenia':373,'Ireland':344,'Wales':110,'Finland':244,'Iceland':164,'Cyprus':318,'Malta':389,'Luxembourg':261,'Belarus':116,'Russia':235}
@@ -18,7 +17,7 @@ def is_youth_league(name):
 
 app=Flask(__name__)
 @app.route('/')
-def home():return f'BOT V37 ANGOLI PAID - {datetime.now(ITALY).strftime("%H:%M")}',200
+def home():return f'BOT V40 SFIGATA VANTAGGIO + FILTRO 4 - {datetime.now(ITALY).strftime("%H:%M")}',200
 
 TAST=json.dumps({"keyboard":[
 ["Serie A","Serie B","Inghilterra"],
@@ -66,7 +65,6 @@ def get_corners_fixture(fid):
   return tot if found else None
  except:return None
 
-# ===== SOLO AGGIUNTA SFIGATA 4.5 =====
 def get_sfigata(fid):
  try:
   u="https://v3.football.api-sports.io"+f"/odds?fixture={fid}"
@@ -261,21 +259,21 @@ def poll():
      last_id=u['update_id'];msg=u.get('message',{});txt=(msg.get('text') or '').strip();low=txt.lower();cid=msg.get('chat',{}).get('id')
      if not txt:continue
      if 'chiudi menu' in low:tg('✅ Menu chiuso',cid,True,True);continue
-     elif 'apri menu' in low:tg('✅ Menu aperto V37',cid,True,False);continue
+     elif 'apri menu' in low:tg('✅ Menu aperto V40',cid,True,False);continue
      elif 'spegni' in low:is_paused=True;tg('⏸️ PAUSA',cid,True);continue
-     elif 'accendi' in low or '/start' in low:is_paused=False;tg('▶️ V37 ATTIVO - ANGOLI FIX',cid,True);continue
+     elif 'accendi' in low or '/start' in low:is_paused=False;tg('▶️ V40 ATTIVO - FILTRO 4 + SFIGATA PAREGGIO/VANTAGGIO',cid,True);continue
      elif 'angolo' in low or 'calcio d' in low:
          threading.Thread(target=media_tutte_angoli,args=(cid,),daemon=True).start();continue
      elif 'statistiche 35' in low:
          threading.Thread(target=media_tutte_35,args=(cid,),daemon=True).start();continue
-     elif 'status' in low:tg(f'STATUS V37 - {datetime.now(ITALY).strftime("%H:%M")}',cid,True);continue
+     elif 'status' in low:tg(f'STATUS V40 - {datetime.now(ITALY).strftime("%H:%M")}',cid,True);continue
      elif 'doppia' in low:run_doppia(cid);continue
      elif 'bolla' in low:run_bolla(cid);continue
   except:pass
   time.sleep(2)
 
 def live_loop():
- tg('✅ BOT V37 ATTIVO\n🚩 CALCIO D\'ANGOLO +6 FIX PAID\n📊 STATS 35 GOL\n🌍 LIVE MONDO + SFIGATA 4.5',None,True)
+ tg('✅ BOT V40 ATTIVO\n🚩 ANGOLO +6\n📊 FILTRO TIRO 1T >=4\n⚽ SFIGATA SOLO PAREGGIO/VANTAGGIO',None,True)
  while True:
   try:
    if is_paused:time.sleep(30);continue
@@ -288,26 +286,40 @@ def live_loop():
     fid=g['fixture']['id'];m=g['fixture']['status']['elapsed']
     if m is None:continue
     home=g['teams']['home']['name'];away=g['teams']['away']['name'];gh=g['goals']['home'];ga=g['goals']['away']
-    # ===== SFIGATA GOAL CHECK - UNICA AGGIUNTA =====
+
+    # ===== FIX SFIGATA - SOLO PAREGGIO O VANTAGGIO =====
     if fid not in av_sfiga_score:
      av_sfiga_score[fid]=(gh,ga)
     else:
      oh,oa=av_sfiga_score[fid]
      if gh!=oh or ga!=oa:
+      # Chi ha segnato ora
       chi='HOME' if gh>oh else 'AWAY'
       av_sfiga_score[fid]=(gh,ga)
       sf=get_sfigata(fid)
       if sf:
        tipo,qs,tf,qf=sf
        if chi==tipo:
-        ns=home if tipo=='HOME' else away
-        nf=away if tipo=='HOME' else home
-        co=g['league']['country']
-        txt=f"⚽ GOAL SFIGATA {m}' {co} {home} {gh}-{ga} {away}\n"
-        txt+=f"Sfigata {ns} @{qs} segna!\n"
-        txt+=f"Favorita {nf} @{qf} sotto\n"
-        txt+=f"👉 RIGIOCA SUBITO GOL FAV / OVER"
-        tg(txt)
+        # LOGICA NUOVA: sfigata segna -> controllo se ora pareggia o va avanti
+        sfiga_gol = gh if tipo=='HOME' else ga
+        fav_gol = ga if tipo=='HOME' else gh
+        
+        # Avvisa SOLO se pareggia (==) o vantaggio (>)
+        if sfiga_gol >= fav_gol:
+            ns=home if tipo=='HOME' else away
+            nf=away if tipo=='HOME' else home
+            co=g['league']['country']
+            if sfiga_gol == fav_gol:
+                stato = "PAREGGIA"
+            else:
+                stato = "VA IN VANTAGGIO"
+            txt=f"⚽ SFIGATA {stato} {m}' {co} {home} {gh}-{ga} {away}\n"
+            txt+=f"Sfigata {ns} @{qs} {stato.lower()}!\n"
+            txt+=f"Favorita {nf} @{qf} in difficoltà\n"
+            txt+=f"👉 RIGIOCA SUBITO GOL FAV / OVER"
+            tg(txt)
+
+    # ===== FIX PRIMO TEMPO - FILTRO DA 4 IN SU =====
     if 30<=m<=45 and fid not in av_s_first:
      u="https://v3.football.api-sports.io"+f"/fixtures/statistics?fixture={fid}"
      st=api(u);sot=0;corn=0
@@ -320,7 +332,11 @@ def live_loop():
         if 'corner' in x['type'].lower():
          try:corn+=int(str(x['value'] or 0))
          except:pass
-     if sot>=2 or corn>=4:tg(f"🔥 PRIMO TEMPO {m}' {g['league']['country']} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{corn}");av_s_first.add(fid)
+     # FILTRO NUOVO >=4
+     if sot>=4 or corn>=6:
+        tg(f"🔥 PRIMO TEMPO {m}' {g['league']['country']} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{corn}")
+        av_s_first.add(fid)
+
     if 65<=m<=90 and fid not in av_s:
      u="https://v3.football.api-sports.io"+f"/fixtures/statistics?fixture={fid}"
      st=api(u);sot=0;corn=0
@@ -334,6 +350,7 @@ def live_loop():
          try:corn+=int(str(x['value'] or 0))
          except:pass
      if sot>=4 or corn>=6:tg(f"🚀 GIOCALO {m}' {g['league']['country']} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{corn}");av_s.add(fid);av_g[fid]=gh+ga
+
    for g in games:
     fid=g['fixture']['id']
     if fid in av_g:
