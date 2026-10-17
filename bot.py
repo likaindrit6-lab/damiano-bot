@@ -36,13 +36,13 @@ def tg(m,cid=None,keys=False,chiusa=False):
   cid=cid or CHAT
   if not cid or not BOT: return
   base="https://api.telegram.org/bot"+BOT
-  upper=m.upper()
-  if "PREPARATI" in upper and "🔥" not in m: m=f"🔥 {m}"
-  elif "GIOCALO" in upper and "🚀" not in m: m=f"🚀 {m}"
+  up=m.upper()
+  if "PREPARATI" in up and "🔥" not in m: m=f"🔥 {m}"
+  elif "GIOCALO" in up and "🚀" not in m: m=f"🚀 {m}"
   pay={"chat_id":cid,"text":m,"parse_mode":"HTML"}
   if keys: pay["reply_markup"]=json.loads(TAST_CHIUSA if chiusa else TAST)
   requests.post(base+"/sendMessage",json=pay,timeout=25)
- except Exception as e: print(e)
+ except: print("tg error")
 
 def api(url):
  try:
@@ -51,27 +51,9 @@ def api(url):
   return r.json().get("response",[])
  except: return []
 
-def get_sfigata(fid):
- try:
-  u="https://v3.football.api-sports.io/odds?fixture="+str(fid)
-  data=api(u)
-  if not data or data=="LIMIT": return None
-  for book in data[0].get("bookmakers",[])[:2]:
-   for bet in book.get("bets",[]):
-    if bet.get("name")=="Match Winner":
-     q={}
-     for v in bet.get("values",[]):
-      try: q[v.get("value")]=float(v.get("odd"))
-      except: pass
-     h=q.get("Home",0); a=q.get("Away",0)
-     if h>=4.5 and h>a and a<=1.8: return ("HOME",h,"AWAY",a)
-     if a>=4.5 and a>h and h<=1.8: return ("AWAY",a,"HOME",h)
-  return None
- except: return None
-
 def get_double_chance(fid):
  try:
-  u="https://v3.football.api-sports.io/odds?fixture="+str(fid)
+  u=f"https://v3.football.api-sports.io/odds?fixture={fid}"
   data=api(u)
   if not data or data=="LIMIT": return None
   for book in data[0].get("bookmakers",[])[:3]:
@@ -84,68 +66,87 @@ def get_double_chance(fid):
        if odd<best_odd: best_odd=odd; best=v.get("value")
       except: continue
      if best:
-      if "Home/Draw" in best: return "1X @ "+str(best_odd)
-      if "Draw/Away" in best: return "X2 @ "+str(best_odd)
-      if "Home/Away" in best: return "12 @ "+str(best_odd)
- except: pass
- return None
-
-def get_over_15(fid):
- try:
-  u="https://v3.football.api-sports.io/odds?fixture="+str(fid)
-  data=api(u)
-  if not data or data=="LIMIT": return None
-  for book in data[0].get("bookmakers",[])[:3]:
-   for bet in book.get("bets",[]):
-    if "Over/Under" in bet.get("name",""):
-     for v in bet.get("values",[]):
-      if "Over 1.5" in v.get("value",""):
-       try: return float(v.get("odd"))
-       except: continue
+      if "Home/Draw" in best: return f"1X @ {best_odd}"
+      if "Draw/Away" in best: return f"X2 @ {best_odd}"
+      if "Home/Away" in best: return f"12 @ {best_odd}"
  except: pass
  return None
 
 def get_fixtures_today():
  today=datetime.now(ROME).strftime("%Y-%m-%d")
- return api("https://v3.football.api-sports.io/fixtures?date="+today)
+ return api(f"https://v3.football.api-sports.io/fixtures?date={today}")
 
 def run_bolla(cid=None,auto=False):
  try:
-  tg(f"BOLLA ricevuta - cerco...",cid,True)
+  tg("BOLLA ricevuta - cerco dalle adesso a mezzanotte...",cid,True)
   data=get_fixtures_today()
-  if not data or data=="LIMIT":
-   tg("BOLLA: Limite API o 0 partite oggi",cid,True)
+  if data=="LIMIT" or not data:
+   tg("BOLLA: Limite API",cid,True)
    return
   sel=[]
   now_dt=datetime.now(ROME)
-  now_hm=now_dt.strftime("%H:%M")
-  count_check=0
+  cnt=0
   for f in data:
+   if f.get("league",{}).get("country") not in TOP_LEAGUES: continue
+   if f.get("league",{}).get("id")!=TOP_LEAGUES.get(f.get("league",{}).get("country")): continue
+   if is_youth_league(f.get("league",{}).get("name","")): continue
+   if f.get("fixture",{}).get("status",{}).get("short")!="NS": continue
    try:
-    if f.get("league",{}).get("country") not in TOP_LEAGUES: continue
-    if f.get("league",{}).get("id")!=TOP_LEAGUES.get(f.get("league",{}).get("country")): continue
-    if is_youth_league(f.get("league",{}).get("name","")): continue
-    if f.get("fixture",{}).get("status",{}).get("short")!="NS": continue
-    # orario reale Roma
-    f_date_str=f.get("fixture",{}).get("date","")
-    try:
-     f_dt=datetime.fromisoformat(f_date_str.replace("Z","+00:00")).astimezone(ROME)
-    except:
-     f_dt=now_dt
-    if f_dt < now_dt: continue
-    ora=f_dt.strftime("%H:%M")
-    fid=f.get("fixture",{}).get("id")
-    count_check+=1
-    if count_check>25: break  # per non bruciare API
-    dc=get_double_chance(fid)
-    if not dc: continue
-    try: q=float(dc.split("@")[1].strip())
-    except: continue
-    if q>1.40: continue
-    home=f.get("teams",{}).get("home",{}).get("name")
-    away=f.get("teams",{}).get("away",{}).get("name")
-    sel.append(f"{ora} {home} vs {away} -> {dc}")
-    if len(sel)>=33: break
+    f_dt=datetime.fromisoformat(f.get("fixture",{}).get("date","").replace("Z","+00:00")).astimezone(ROME)
    except: continue
+   if f_dt < now_dt: continue
+   fid=f.get("fixture",{}).get("id")
+   cnt+=1
+   if cnt>30: break
+   dc=get_double_chance(fid)
+   if not dc: continue
+   try: q=float(dc.split("@")[1].strip())
+   except: continue
+   if q>1.40: continue
+   sel.append(f"{f_dt.strftime('%H:%M')} {f.get('teams',{}).get('home',{}).get('name')} vs {f.get('teams',{}).get('away',{}).get('name')} -> {dc}")
+   if len(sel)>=33: break
   if not sel:
-   tg(f
+   tg(f"0 BOLLA ALTA <=1.40 dalle {now_dt.strftime('%H:%M')} a mezzanotte",cid,True)
+   return
+  out=f"BOLLA ALTA 90% - {len(sel)} partite fino a mezzanotte\n\n"
+  for i,m in enumerate(sel,1): out+=f"{i}. {m}\n"
+  tg(out,cid,True)
+ except Exception as e:
+  tg(f"Errore bolla: {e}",cid,True)
+
+def poll():
+ global is_paused,last_id
+ try:
+  if BOT: requests.get(f"https://api.telegram.org/bot{BOT}/deleteWebhook?drop_pending_updates=true",timeout=10)
+ except: pass
+ while True:
+  try:
+   if not BOT: time.sleep(60); continue
+   base=f"https://api.telegram.org/bot{BOT}"
+   url=base+f"/getUpdates?offset={last_id+1}&timeout=20"
+   r=requests.get(url,timeout=30).json()
+   if r.get("ok"):
+    for u in r.get("result",[]):
+     last_id=u["update_id"]
+     msg=u.get("message",{}); txt=(msg.get("text") or "").strip(); low=txt.lower(); cid=msg.get("chat",{}).get("id")
+     if not txt: continue
+     if "chiudi menu" in low: tg("Menu chiuso",cid,True,True); continue
+     elif "apri menu" in low: tg("Menu aperto V54",cid,True,False); continue
+     elif "spegni" in low: is_paused=True; tg("PAUSA",cid,True); continue
+     elif "accendi" in low or "/start" in low: is_paused=False; tg("V54 ATTIVO",cid,True); continue
+     elif "status" in low: tg("STATUS V54 OK",cid,True); continue
+     elif "bolla" in low:
+      threading.Thread(target=run_bolla,args=(cid,False),daemon=True).start()
+      continue
+  except: pass
+  time.sleep(2)
+
+def live_loop():
+ tg("BOT V54 ATTIVO",None,True)
+ while True:
+  time.sleep(60)
+
+threading.Thread(target=poll,daemon=True).start()
+threading.Thread(target=live_loop,daemon=True).start()
+if __name__=="__main__":
+    app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
