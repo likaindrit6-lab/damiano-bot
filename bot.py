@@ -1,4 +1,4 @@
-import os,time,requests,threading,json
+import os,time,requests,threading,json,urllib.parse
 from flask import Flask
 from datetime import datetime,timezone,timedelta
 from zoneinfo import ZoneInfo
@@ -17,7 +17,7 @@ def is_youth_league(name):
 
 app=Flask(__name__)
 @app.route('/')
-def home():return f'BOT V40 SFIGATA VANTAGGIO + FILTRO 4 - {datetime.now(ITALY).strftime("%H:%M")}',200
+def home():return f'BOT V41 BOTTONI OK - {datetime.now(ITALY).strftime("%H:%M")}',200
 
 TAST=json.dumps({"keyboard":[
 ["Serie A","Serie B","Inghilterra"],
@@ -34,14 +34,36 @@ TAST=json.dumps({"keyboard":[
 
 TAST_CHIUSA=json.dumps({"keyboard":[["🎮 APRI MENU"]],"resize_keyboard":True,"is_persistent":False})
 
-def tg(m,cid=None,keys=False,chiusa=False):
+def tg(m,cid=None,keys=False,chiusa=False,home=None,away=None):
  try:
   cid=cid or CHAT
   if not cid or not BOT:return
-  base=f'https://api.telegram.org/bot{BOT}';pay={'chat_id':cid,'text':m,'parse_mode':'HTML'}
-  if keys: pay['reply_markup']=json.loads(TAST_CHIUSA if chiusa else TAST)
+  base=f'https://api.telegram.org/bot{BOT}'
+  
+  # SE HO HOME/AWAY -> MANDO BOTTONI CLICCABILI CHE NON VANNO IN HOMEPAGE
+  if home and away:
+      q = urllib.parse.quote_plus(f"{home} {away}")
+      q2 = urllib.parse.quote_plus(f"{home} {away} quote live")
+      # Questi 3 link FUNZIONANO sempre dall'Italia
+      inline_kb = {
+          "inline_keyboard": [
+              [
+                  {"text": "📊 LIVE SOFASCORE", "url": f"https://www.sofascore.com/search?q={q}"},
+                  {"text": "🔍 QUOTE LIVE", "url": f"https://www.google.com/search?q={q2}"}
+              ],
+              [
+                  {"text": "📈 ODDSPEDIA", "url": f"https://oddspedia.com/search/{q}"}
+              ]
+          ]
+      }
+      pay={'chat_id':cid,'text':m,'parse_mode':'HTML','reply_markup':inline_kb}
+  else:
+      pay={'chat_id':cid,'text':m,'parse_mode':'HTML'}
+      if keys: pay['reply_markup']=json.loads(TAST_CHIUSA if chiusa else TAST)
+  
   requests.post(base+'/sendMessage',json=pay,timeout=25)
- except:pass
+ except Exception as e:
+  print(f"tg error {e}")
 
 def api(url):
  try:
@@ -259,21 +281,21 @@ def poll():
      last_id=u['update_id'];msg=u.get('message',{});txt=(msg.get('text') or '').strip();low=txt.lower();cid=msg.get('chat',{}).get('id')
      if not txt:continue
      if 'chiudi menu' in low:tg('✅ Menu chiuso',cid,True,True);continue
-     elif 'apri menu' in low:tg('✅ Menu aperto V40',cid,True,False);continue
+     elif 'apri menu' in low:tg('✅ Menu aperto V41',cid,True,False);continue
      elif 'spegni' in low:is_paused=True;tg('⏸️ PAUSA',cid,True);continue
-     elif 'accendi' in low or '/start' in low:is_paused=False;tg('▶️ V40 ATTIVO - FILTRO 4 + SFIGATA PAREGGIO/VANTAGGIO',cid,True);continue
+     elif 'accendi' in low or '/start' in low:is_paused=False;tg('▶️ V41 ATTIVO - BOTTONI OK + FILTRO 4',cid,True);continue
      elif 'angolo' in low or 'calcio d' in low:
          threading.Thread(target=media_tutte_angoli,args=(cid,),daemon=True).start();continue
      elif 'statistiche 35' in low:
          threading.Thread(target=media_tutte_35,args=(cid,),daemon=True).start();continue
-     elif 'status' in low:tg(f'STATUS V40 - {datetime.now(ITALY).strftime("%H:%M")}',cid,True);continue
+     elif 'status' in low:tg(f'STATUS V41 - {datetime.now(ITALY).strftime("%H:%M")}',cid,True);continue
      elif 'doppia' in low:run_doppia(cid);continue
      elif 'bolla' in low:run_bolla(cid);continue
   except:pass
   time.sleep(2)
 
 def live_loop():
- tg('✅ BOT V40 ATTIVO\n🚩 ANGOLO +6\n📊 FILTRO TIRO 1T >=4\n⚽ SFIGATA SOLO PAREGGIO/VANTAGGIO',None,True)
+ tg('✅ BOT V41 ATTIVO\n📊 FILTRO 1T >=4\n⚽ SFIGATA SOLO PAREGGIO/VANTAGGIO\n🔗 BOTTONI CLICCABILI OK',None,True)
  while True:
   try:
    if is_paused:time.sleep(30);continue
@@ -287,39 +309,30 @@ def live_loop():
     if m is None:continue
     home=g['teams']['home']['name'];away=g['teams']['away']['name'];gh=g['goals']['home'];ga=g['goals']['away']
 
-    # ===== FIX SFIGATA - SOLO PAREGGIO O VANTAGGIO =====
     if fid not in av_sfiga_score:
      av_sfiga_score[fid]=(gh,ga)
     else:
      oh,oa=av_sfiga_score[fid]
      if gh!=oh or ga!=oa:
-      # Chi ha segnato ora
       chi='HOME' if gh>oh else 'AWAY'
       av_sfiga_score[fid]=(gh,ga)
       sf=get_sfigata(fid)
       if sf:
        tipo,qs,tf,qf=sf
        if chi==tipo:
-        # LOGICA NUOVA: sfigata segna -> controllo se ora pareggia o va avanti
         sfiga_gol = gh if tipo=='HOME' else ga
         fav_gol = ga if tipo=='HOME' else gh
-        
-        # Avvisa SOLO se pareggia (==) o vantaggio (>)
         if sfiga_gol >= fav_gol:
             ns=home if tipo=='HOME' else away
             nf=away if tipo=='HOME' else home
             co=g['league']['country']
-            if sfiga_gol == fav_gol:
-                stato = "PAREGGIA"
-            else:
-                stato = "VA IN VANTAGGIO"
+            stato = "PAREGGIA" if sfiga_gol == fav_gol else "VA IN VANTAGGIO"
             txt=f"⚽ SFIGATA {stato} {m}' {co} {home} {gh}-{ga} {away}\n"
             txt+=f"Sfigata {ns} @{qs} {stato.lower()}!\n"
             txt+=f"Favorita {nf} @{qf} in difficoltà\n"
             txt+=f"👉 RIGIOCA SUBITO GOL FAV / OVER"
-            tg(txt)
+            tg(txt, home=home, away=away)
 
-    # ===== FIX PRIMO TEMPO - FILTRO DA 4 IN SU =====
     if 30<=m<=45 and fid not in av_s_first:
      u="https://v3.football.api-sports.io"+f"/fixtures/statistics?fixture={fid}"
      st=api(u);sot=0;corn=0
@@ -327,38 +340,4 @@ def live_loop():
       for s in st:
        for x in s['statistics']:
         if 'Shots on Goal' in x['type']:
-         try:sot+=int(str(x['value'] or 0))
-         except:pass
-        if 'corner' in x['type'].lower():
-         try:corn+=int(str(x['value'] or 0))
-         except:pass
-     # FILTRO NUOVO >=4
-     if sot>=4 or corn>=6:
-        tg(f"🔥 PRIMO TEMPO {m}' {g['league']['country']} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{corn}")
-        av_s_first.add(fid)
-
-    if 65<=m<=90 and fid not in av_s:
-     u="https://v3.football.api-sports.io"+f"/fixtures/statistics?fixture={fid}"
-     st=api(u);sot=0;corn=0
-     if st and len(st)>=2:
-      for s in st:
-       for x in s['statistics']:
-        if 'Shots on Goal' in x['type']:
-         try:sot+=int(str(x['value'] or 0))
-         except:pass
-        if 'corner' in x['type'].lower():
-         try:corn+=int(str(x['value'] or 0))
-         except:pass
-     if sot>=4 or corn>=6:tg(f"🚀 GIOCALO {m}' {g['league']['country']} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{corn}");av_s.add(fid);av_g[fid]=gh+ga
-
-   for g in games:
-    fid=g['fixture']['id']
-    if fid in av_g:
-     tot=g['goals']['home']+g['goals']['away']
-     if tot>av_g[fid]:tg(f"✅ GOAL VINTO! {g['teams']['home']['name']} {g['goals']['home']}-{g['goals']['away']} {g['teams']['away']['name']}");del av_g[fid]
-   time.sleep(60)
-  except Exception as e:print(e);time.sleep(15)
-
-threading.Thread(target=poll,daemon=True).start()
-threading.Thread(target=live_loop,daemon=True).start()
-if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)))
+         try:sot+=int(str(x['value
