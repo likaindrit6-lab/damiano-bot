@@ -26,13 +26,12 @@ def is_youth_league(name):
     return False
 
 app=Flask(__name__)
-
 @app.route("/")
 def home():
-    return f"BOT V43 OK - {datetime.now(ITALY).strftime('%H:%M')}",200
+    return "BOT V44 OK",200
 
-TAST=json.dumps({"keyboard":[["Serie A","Serie B","Inghilterra"],["Spagna","Germania","Francia"],["Olanda","Portogallo","Turchia"],["DOPPIA ALTA %"],["BOLLA EUROPA 33 NAZIONI"],["\U0001f4ca STATISTICHE 35 NAZIONI"],["\U0001f6a9 CALCIO D'ANGOLO +6"],["STATUS"],["ACCENDI","SPEGNI"],["\u274c CHIUDI MENU"]],"resize_keyboard":True,"is_persistent":False})
-TAST_CHIUSA=json.dumps({"keyboard":[["\U0001f3ae APRI MENU"]],"resize_keyboard":True,"is_persistent":False})
+TAST=json.dumps({"keyboard":[["Serie A","Serie B","Inghilterra"],["Spagna","Germania","Francia"],["Olanda","Portogallo","Turchia"],["DOPPIA ALTA %"],["BOLLA EUROPA 33 NAZIONI"],["STATISTICHE 35 NAZIONI"],["CALCIO D'ANGOLO +6"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
+TAST_CHIUSA=json.dumps({"keyboard":[["APRI MENU"]],"resize_keyboard":True})
 
 def tg(m,cid=None,keys=False,chiusa=False,home=None,away=None):
  try:
@@ -43,7 +42,7 @@ def tg(m,cid=None,keys=False,chiusa=False,home=None,away=None):
   if home and away:
       q=urllib.parse.quote_plus(home+" "+away)
       q2=urllib.parse.quote_plus(home+" "+away+" quote live")
-      inline_kb={"inline_keyboard":[[{"text":"\U0001f4ca LIVE SOFASCORE","url":"https://www.sofascore.com/search?q="+q},{"text":"\U0001f50d QUOTE LIVE","url":"https://www.google.com/search?q="+q2}]]}
+      inline_kb={"inline_keyboard":[[{"text":"LIVE SOFASCORE","url":"https://www.sofascore.com/search?q="+q},{"text":"QUOTE LIVE","url":"https://www.google.com/search?q="+q2}]]}
       pay={"chat_id":cid,"text":m,"parse_mode":"HTML","reply_markup":inline_kb}
   else:
       pay={"chat_id":cid,"text":m,"parse_mode":"HTML"}
@@ -75,8 +74,7 @@ def get_corners_fixture(fid):
   found=False
   for team in stats:
    for s in team.get("statistics",[]):
-    stype=str(s.get("type","")).lower()
-    if "corner" in stype:
+    if "corner" in str(s.get("type","")).lower():
      try:
       tot+=int(str(s.get("value") or 0))
       found=True
@@ -112,94 +110,6 @@ def get_sfigata(fid):
   return None
  except:
   return None
-
-def media_tutte_35(cid):
-    tg("\u23f3 PARTITO STATISTICHE 35 NAZIONI - 4 min",cid,True)
-    for country, lid in TOP_LEAGUES.items():
-        try:
-            u="https://v3.football.api-sports.io/teams?league="+str(lid)+"&season=2024"
-            teams=api(u)
-            if not teams or teams=="LIMIT":
-                continue
-            txt=country.upper()+" - "+datetime.now(ITALY).strftime("%d/%m %H:%M")+"\n\n"
-            for t in teams[:14]:
-              tid=t.get("team",{}).get("id")
-              tname=t.get("team",{}).get("name")
-              uu="https://v3.football.api-sports.io/fixtures?team="+str(tid)+"&last=10&season=2024"
-              last=api(uu)
-              if not last or last=="LIMIT":
-                  time.sleep(0.4)
-                  continue
-              tot=0
-              c=0
-              for p in last:
-               gh=p.get("goals",{}).get("home")
-               if gh is None:
-                   continue
-               ga=p.get("goals",{}).get("away")
-               tot+=gh+ga
-               c+=1
-              if c==0:
-                  continue
-              med=tot/c
-              if med>2:
-                  txt+="PIU DI 2 - "+tname+": "+str(round(med,2))+"\n"
-              else:
-                  txt+="MENO DI 2 - "+tname+": "+str(round(med,2))+"\n"
-              time.sleep(0.3)
-            tg(txt,cid,True)
-            time.sleep(1)
-        except:
-            pass
-    tg("\u2705 FINITO STATISTICHE 35 GOL",cid,True)
-
-def media_tutte_angoli(cid):
-    tg("\u23f3 PARTITO CALCIO D'ANGOLO +6 - 35 NAZIONI",cid,True)
-    for country, lid in TOP_LEAGUES.items():
-        try:
-            u="https://v3.football.api-sports.io/teams?league="+str(lid)+"&season=2025"
-            teams=api(u)
-            if not teams or teams=="LIMIT":
-              uu="https://v3.football.api-sports.io/teams?league="+str(lid)+"&season=2024"
-              teams=api(uu)
-            if not teams or teams=="LIMIT":
-                continue
-            txt="\U0001f6a9 "+country.upper()+" - CORNER\n\n"
-            trovati=0
-            for t in teams[:14]:
-              tid=t.get("team",{}).get("id")
-              tname=t.get("team",{}).get("name")
-              uu="https://v3.football.api-sports.io/fixtures?team="+str(tid)+"&last=10"
-              last=api(uu)
-              if not last or last=="LIMIT":
-                  time.sleep(0.4)
-                  continue
-              tot_corners=0
-              c=0
-              for p in last:
-               if p.get("fixture",{}).get("status",{}).get("short")!="FT":
-                   continue
-               fid=p.get("fixture",{}).get("id")
-               corn=get_corners_fixture(fid)
-               if corn is None:
-                   continue
-               tot_corners+=corn
-               c+=1
-               time.sleep(0.35)
-              if c==0:
-                  continue
-              med=tot_corners/c
-              if med>=6.0:
-               txt+="\U0001f525 "+tname+": "+str(round(med,1))+" corner\n"
-               trovati+=1
-              time.sleep(0.3)
-            if trovati==0:
-              txt+="Nessuna squadra con +6 corner in "+country+"\n"
-            tg(txt,cid,True)
-            time.sleep(1)
-        except Exception as e:
-            tg("Errore "+country+": "+str(e),cid,True)
-    tg("\u2705 FINITO ANGOLI +6",cid,True)
 
 def get_double_chance(fid):
  try:
@@ -263,7 +173,7 @@ def run_bolla(cid=None,auto=False):
   return
  sel=[]
  if not auto:
-     tg("Cerco TOP LEAGUE + DOPPIA...",cid,True)
+     tg("Cerco TOP LEAGUE...",cid,True)
  for country,top_id in TOP_LEAGUES.items():
   found=None
   for f in data:
@@ -276,24 +186,22 @@ def run_bolla(cid=None,auto=False):
     break
   if not found:
       continue
-  fid=found.get("fixture",{}).get("id")
   ora=str(found.get("fixture",{}).get("date",""))[11:16]
   home=found.get("teams",{}).get("home",{}).get("name")
   away=found.get("teams",{}).get("away",{}).get("name")
-  league=found.get("league",{}).get("name")
-  dc=get_double_chance(fid) or "1X"
-  sel.append(ora+" "+home+" vs "+away+" -> "+dc+" ("+league+")")
+  dc=get_double_chance(found.get("fixture",{}).get("id")) or "1X"
+  sel.append(ora+" "+home+" vs "+away+" -> "+dc)
   if len(sel)>=35:
       break
  if not sel:
   if not auto:
-      tg("Oggi nessuna TOP LEAGUE in programma",cid,True)
+      tg("Oggi nessuna TOP LEAGUE",cid,True)
   return
  out_txt="BOLLA EUROPA "+str(len(sel))+" NAZIONI\n\n"
- num=1
- for m in sel:
-     out_txt+=str(num)+". "+m+"\n"
-     num+=1
+ n=1
+ for mm in sel:
+     out_txt=out_txt+str(n)+". "+mm+"\n"
+     n=n+1
  tg(out_txt,cid,True)
 
 def run_doppia(cid=None,auto=False):
@@ -320,8 +228,7 @@ def run_doppia(cid=None,auto=False):
             ora=str(f.get("fixture",{}).get("date",""))[11:16]
             home=f.get("teams",{}).get("home",{}).get("name")
             away=f.get("teams",{}).get("away",{}).get("name")
-            league=f.get("league",{}).get("name")
-            out.append(ora+" "+home+" vs "+away+" -> OVER 1.5 @ "+str(over_odd)+" ("+league+")")
+            out.append(ora+" "+home+" vs "+away+" OVER 1.5 @ "+str(over_odd))
             time.sleep(0.4)
             if len(out)>=15:
                 break
@@ -329,14 +236,14 @@ def run_doppia(cid=None,auto=False):
             continue
     if out:
         out_txt="DOPPIA "+str(len(out))+" OVER 1.5\n\n"
-        num=1
-        for m in out:
-            out_txt+=str(num)+". "+m+"\n"
-            num+=1
+        n=1
+        for mm in out:
+            out_txt=out_txt+str(n)+". "+mm+"\n"
+            n=n+1
         tg(out_txt,cid,True)
     else:
         if not auto:
-            tg("Oggi nessun OVER 1.5 <1.55",cid,True)
+            tg("Oggi nessun OVER 1.5",cid,True)
 
 def poll():
  global is_paused,last_id
@@ -363,27 +270,21 @@ def poll():
      if not txt:
          continue
      if "chiudi menu" in low:
-         tg("\u2705 Menu chiuso",cid,True,True)
+         tg("Menu chiuso",cid,True,True)
          continue
      elif "apri menu" in low:
-         tg("\u2705 Menu aperto V43",cid,True,False)
+         tg("Menu aperto V44",cid,True,False)
          continue
      elif "spegni" in low:
          is_paused=True
-         tg("\u23f8\ufe0f PAUSA",cid,True)
+         tg("PAUSA",cid,True)
          continue
      elif "accendi" in low or "/start" in low:
          is_paused=False
-         tg("\u25b6\ufe0f V43 ATTIVO - FIX TOTALE + BOTTONI",cid,True)
-         continue
-     elif "angolo" in low or "calcio d" in low:
-         threading.Thread(target=media_tutte_angoli,args=(cid,),daemon=True).start()
-         continue
-     elif "statistiche 35" in low:
-         threading.Thread(target=media_tutte_35,args=(cid,),daemon=True).start()
+         tg("V44 ATTIVO FIX TOTALE",cid,True)
          continue
      elif "status" in low:
-         tg("STATUS V43 - "+datetime.now(ITALY).strftime("%H:%M"),cid,True)
+         tg("STATUS V44 OK",cid,True)
          continue
      elif "doppia" in low:
          run_doppia(cid)
@@ -396,7 +297,7 @@ def poll():
   time.sleep(2)
 
 def live_loop():
- tg("\u2705 BOT V43 ATTIVO\n\U0001f4ca FILTRO 1T >=4\n\u26bd SFIGATA SOLO PAREGGIO/VANTAGGIO\n\U0001f517 BOTTONI OK",None,True)
+ tg("BOT V44 ATTIVO - FIX 447 OK - BOTTONI OK",None,True)
  while True:
   try:
    if is_paused:
@@ -415,14 +316,13 @@ def live_loop():
        continue
    for g in games:
     fid=g.get("fixture",{}).get("id")
-    m=g.get("fixture",{}).get("status",{}).get("elapsed")
-    if m is None:
+    mm=g.get("fixture",{}).get("status",{}).get("elapsed")
+    if mm is None:
         continue
     home=g.get("teams",{}).get("home",{}).get("name")
     away=g.get("teams",{}).get("away",{}).get("name")
     gh=g.get("goals",{}).get("home")
     ga=g.get("goals",{}).get("away")
-
     if fid not in av_sfiga_score:
      av_sfiga_score[fid]=(gh,ga)
     else:
@@ -437,11 +337,84 @@ def live_loop():
         sfiga_gol = gh if tipo=="HOME" else ga
         fav_gol = ga if tipo=="HOME" else gh
         if sfiga_gol >= fav_gol:
-            ns=home if tipo=="HOME" else away
-            nf=away if tipo=="HOME" else home
             co=g.get("league",{}).get("country")
             if sfiga_gol == fav_gol:
                 stato="PAREGGIA"
             else:
-                stato="VA IN VANTAGGIO"
-            txt="\u26bd SFIGATA "+stato+" "+str(m)+"' "+co+" "+home+" "+str(gh)+"-"+str(
+                stato="VANTAGGIO"
+            ns=home if tipo=="HOME" else away
+            nf=away if tipo=="HOME" else home
+            line1="SFIGATA "+stato+" "+str(mm)+"' "+co+" "+home+" "+str(gh)+"-"+str(ga)+" "+away
+            line2="Sfigata "+ns+" @"+str(qs)
+            line3="Favorita "+nf+" @"+str(qf)+" - RIGIOCA GOL FAV"
+            full=line1+"\n"+line2+"\n"+line3
+            tg(full, home=home, away=away)
+    if 30<=mm<=45 and fid not in av_s_first:
+     u="https://v3.football.api-sports.io/fixtures/statistics?fixture="+str(fid)
+     st=api(u)
+     sot=0
+     corn=0
+     if st and len(st)>=2:
+      for s in st:
+       for x in s.get("statistics",[]):
+        t=x.get("type","")
+        if "Shots on Goal" in t:
+         try:
+          v=x.get("value")
+          sot=sot+int(str(v or 0))
+         except:
+          pass
+        if "corner" in t.lower():
+         try:
+          v=x.get("value")
+          corn=corn+int(str(v or 0))
+         except:
+          pass
+     if sot>=4 or corn>=6:
+        tg("PRIMO TEMPO "+str(mm)+"' "+home+" "+str(gh)+"-"+str(ga)+" "+away+" Tiri:"+str(sot), home=home, away=away)
+        av_s_first.add(fid)
+    if 65<=mm<=90 and fid not in av_s:
+     u="https://v3.football.api-sports.io/fixtures/statistics?fixture="+str(fid)
+     st=api(u)
+     sot=0
+     corn=0
+     if st and len(st)>=2:
+      for s in st:
+       for x in s.get("statistics",[]):
+        t=x.get("type","")
+        if "Shots on Goal" in t:
+         try:
+          v=x.get("value")
+          sot=sot+int(str(v or 0))
+         except:
+          pass
+        if "corner" in t.lower():
+         try:
+          v=x.get("value")
+          corn=corn+int(str(v or 0))
+         except:
+          pass
+     if sot>=4 or corn>=6:
+        tg("GIOCALO "+str(mm)+"' "+home+" "+str(gh)+"-"+str(ga)+" "+away, home=home, away=away)
+        av_s.add(fid)
+        av_g[fid]=gh+ga
+   for g in games:
+    fid=g.get("fixture",{}).get("id")
+    if fid in av_g:
+     gh2=g.get("goals",{}).get("home")
+     ga2=g.get("goals",{}).get("away")
+     tot=gh2+ga2
+     if tot>av_g[fid]:
+         hn=g.get("teams",{}).get("home",{}).get("name")
+         an=g.get("teams",{}).get("away",{}).get("name")
+         tg("GOAL VINTO! "+hn+" "+str(gh2)+"-"+str(ga2)+" "+an)
+         del av_g[fid]
+   time.sleep(60)
+  except Exception as e:
+   print(e)
+   time.sleep(15)
+
+threading.Thread(target=poll,daemon=True).start()
+threading.Thread(target=live_loop,daemon=True).start()
+if __name__=="__main__":
+    app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
