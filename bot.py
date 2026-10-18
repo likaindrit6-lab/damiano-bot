@@ -287,8 +287,72 @@ def run_over90(cid=None):
    tg(f"0 partite 90% oggi. Controllate {chk}",cid,True)
  except Exception as e:
   tg(f"Errore Over90: {e}",cid,True)
+
+# >>> BOLLA NUOVA INCORLATA QUI - NOME + QUOTA 1.30 + 1 x NAZIONE <<<
 def run_bolla(cid=None):
- tg("BOLLA - funzione vecchia mantenuta, usa OVER 1.5 90% per nuova versione",cid,True)
+ try:
+  tg("BOLLA EUROPA 33 NAZIONI - NOME + QUOTA 1.30 MAX - Analizzo 3 min...",cid,True)
+  today=datetime.now(ROME).strftime("%Y-%m-%d")
+  data=api(f"https://v3.football.api-sports.io/fixtures?date={today}") or []
+  now_dt=datetime.now(ROME)
+  best_per_country={}
+  for fx in data:
+   lg=fx.get("league",{})
+   co=lg.get("country")
+   if co not in TOP:
+    continue
+   if lg.get("id")!=TOP.get(co):
+    continue
+   if is_youth(lg.get("name","")):
+    continue
+   if fx.get("fixture",{}).get("status",{}).get("short")!="NS":
+    continue
+   try:
+    fd=fx.get("fixture",{}).get("date","").replace("Z","+00:00")
+    fdt=datetime.fromisoformat(fd).astimezone(ROME)
+   except:
+    continue
+   if fdt<now_dt:
+    continue
+   tm=fx.get("teams",{})
+   hid=tm.get("home",{}).get("id")
+   aid=tm.get("away",{}).get("id")
+   perc=get_best90(hid,aid)
+   if perc=="LIMIT":
+    time.sleep(60)
+    perc=get_best90(hid,aid)
+   if not perc or perc<85:
+    continue
+   fid=fx.get("fixture",{}).get("id")
+   odd=get_over_odd(fid)
+   if odd is None or odd<1.20 or odd>1.40:
+    continue
+   ora=fdt.strftime("%H:%M")
+   hn=tm.get("home",{}).get("name")
+   an=tm.get("away",{}).get("name")
+   testo=f"{ora} {hn} vs {an} [{co}] Over 1.5 @ {odd} ({perc:.0f}%)"
+   if co not in best_per_country or perc>best_per_country[co][0]:
+    best_per_country[co]=(perc,odd,testo)
+  if not best_per_country:
+   tg("Nessuna partita valida per BOLLA oggi",cid,True)
+   return
+  lista=list(best_per_country.values())
+  lista.sort(key=lambda x: x[0], reverse=True)
+  quota_tot=1.0
+  out=f"BOLLA EUROPA 33 NAZIONI - {len(lista)} NAZIONI - NOME + QUOTA 1.30\n\n"
+  for i,(perc,odd,testo) in enumerate(lista,1):
+   quota_tot*=odd
+   out+=f"{i}. {testo}\n"
+  out+=f"\nTOT NAZIONI: {len(lista)}\n"
+  out+=f"QUOTA TOTALE: {quota_tot:.2f}\n"
+  if len(out)>3500:
+   tg(out[:3500],cid,True)
+   tg(out[3500:],cid,True)
+  else:
+   tg(out,cid,True)
+ except Exception as e:
+  tg(f"Errore Bolla: {e}",cid,True)
+
 def run_doppia(cid=None):
  try:
   today=datetime.now(ROME).strftime("%Y-%m-%d")
