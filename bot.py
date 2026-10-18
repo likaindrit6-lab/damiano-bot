@@ -13,17 +13,7 @@ av_g={}
 av_s=set()
 av_s_first=set()
 av_sfiga_score={}
-TOP={
-"Italy":135,"England":39,"Spain":140,"Germany":78,
-"France":61,"Netherlands":88,"Portugal":94,"Belgium":144,
-"Turkey":203,"Scotland":179,"Austria":218,"Switzerland":207,
-"Denmark":106,"Sweden":113,"Norway":103,"Poland":107,
-"Czech Republic":345,"Croatia":210,"Serbia":286,"Greece":197,
-"Romania":283,"Bulgaria":172,"Hungary":271,"Slovakia":332,
-"Slovenia":373,"Ireland":344,"Wales":110,"Finland":244,
-"Iceland":164,"Cyprus":318,"Malta":389,"Luxembourg":261,
-"Belarus":116,"Russia":235
-}
+TOP={"Italy":135,"England":39,"Spain":140,"Germany":78,"France":61,"Netherlands":88,"Portugal":94,"Belgium":144,"Turkey":203,"Scotland":179,"Austria":218,"Switzerland":207,"Denmark":106,"Sweden":113,"Norway":103,"Poland":107,"Czech Republic":345,"Croatia":210,"Serbia":286,"Greece":197,"Romania":283,"Bulgaria":172,"Hungary":271,"Slovakia":332,"Slovenia":373,"Ireland":344,"Wales":110,"Finland":244,"Iceland":164,"Cyprus":318,"Malta":389,"Luxembourg":261,"Belarus":116,"Russia":235}
 def is_youth(n):
  b=n.lower()
  for x in ["u19","u21","u23","u17","women","youth","reserve"]:
@@ -57,7 +47,7 @@ def api(url):
   if r.status_code==429:
    return "LIMIT"
   return r.json().get("response",[])
- except:
+ except Exception:
   return []
 def get_sfigata(fid):
  try:
@@ -72,7 +62,7 @@ def get_sfigata(fid):
      for v in bet.get("values",[]):
       try:
        q[v.get("value")]=float(v.get("odd"))
-      except:
+      except Exception:
        pass
      h=q.get("Home",0)
      a=q.get("Away",0)
@@ -81,7 +71,7 @@ def get_sfigata(fid):
      if a>=4.5 and a>h and h<=1.8:
       return ("AWAY",a,"HOME",h)
   return None
- except:
+ except Exception:
   return None
 def get_over_odd(fid):
  try:
@@ -96,9 +86,9 @@ def get_over_odd(fid):
       if "Over 1.5" in v.get("value",""):
        try:
         return float(v.get("odd"))
-       except:
+       except Exception:
         pass
- except:
+ except Exception:
   pass
  return None
 def get_last10(team_id):
@@ -117,7 +107,7 @@ def get_last10(team_id):
    if gh+ga>=2:
     c15+=1
   return c15/tot*100
- except:
+ except Exception:
   return None
 def get_best90(hid,aid):
  try:
@@ -134,7 +124,7 @@ def get_best90(hid,aid):
   if avg>=90:
    return avg
   return None
- except:
+ except Exception:
   return None
 def get_corner_avg_team(team_id):
  try:
@@ -159,7 +149,7 @@ def get_corner_avg_team(team_id):
      if "corner" in (x.get("type") or "").lower():
       try:
        c+=int(str(x.get("value") or 0))
-      except:
+      except Exception:
        pass
    if c>0:
     tot+=c
@@ -168,11 +158,11 @@ def get_corner_avg_team(team_id):
   if cnt<3:
    return None
   return tot/cnt
- except:
+ except Exception:
   return None
 def run_corner_over65(cid=None):
  try:
-  tg("OVER 6.5 ANGOLI - PRE MATCH - Analizzo...",cid,True)
+  tg("OVER 6.5 ANGOLI - Analizzo...",cid,True)
   today=datetime.now(ROME).strftime("%Y-%m-%d")
   data=api(f"https://v3.football.api-sports.io/fixtures?date={today}") or []
   now_dt=datetime.now(ROME)
@@ -192,7 +182,7 @@ def run_corner_over65(cid=None):
    try:
     fd=fx.get("fixture",{}).get("date","").replace("Z","+00:00")
     fdt=datetime.fromisoformat(fd).astimezone(ROME)
-   except:
+   except Exception:
     continue
    if fdt<now_dt:
     continue
@@ -220,17 +210,17 @@ def run_corner_over65(cid=None):
     ora=fdt.strftime("%H:%M")
     hn=tm.get("home",{}).get("name")
     an=tm.get("away",{}).get("name")
-    sel.append((avg,f"{ora} [{co}] {hn} vs {an} -> Media {avg:.1f} - OVER 6.5"))
+    sel.append((avg,f"{ora} [{co}] {hn} vs {an} -> {avg:.1f} OVER 6.5"))
   if sel:
    sel.sort(key=lambda x: x[0], reverse=True)
-   out=f"OVER 6.5 ANGOLI PRE MATCH - {len(sel)} partite OGGI (su {chk})\n\n"
+   out=f"OVER 6.5 ANGOLI - {len(sel)} partite\n\n"
    for i,(a,m) in enumerate(sel,1):
     out+=f"{i}. {m}\n"
    tg(out,cid,True)
   else:
-   tg(f"0 partite con media Over 6.5 oggi. Analizzate {chk}",cid,True)
+   tg("0 partite Over 6.5 oggi",cid,True)
  except Exception as e:
-  tg(f"Errore Corner Over 6.5: {e}",cid,True)
+  tg(f"Errore Corner: {e}",cid,True)
 def run_over90(cid=None):
  try:
   tg("OVER 1.5 90% NAZIONI - Analizzo...",cid,True)
@@ -255,7 +245,7 @@ def run_over90(cid=None):
    try:
     fd=fx.get("fixture",{}).get("date","").replace("Z","+00:00")
     fdt=datetime.fromisoformat(fd).astimezone(ROME)
-   except:
+   except Exception:
     continue
    if fdt<now_dt:
     continue
@@ -275,21 +265,21 @@ def run_over90(cid=None):
    hn=tm.get("home",{}).get("name")
    an=tm.get("away",{}).get("name")
    ln=lg.get("name","")
-   sel.append(f"{ora} [{co} - {ln}] {hn} vs {an} -> Over 1.5 @ {perc:.0f}%")
+   sel.append(f"{ora} [{co} - {ln}] {hn} vs {an} -> {perc:.0f}%")
    if len(sel)>=20:
     break
   if sel:
-   out=f"OVER 1.5 90% NAZIONI - {len(sel)} partite\n\n"
+   out=f"OVER 1.5 90% - {len(sel)} partite\n\n"
    for i,m in enumerate(sel,1):
     out+=f"{i}. {m}\n"
    tg(out,cid,True)
   else:
-   tg(f"0 partite 90% oggi. Controllate {chk}",cid,True)
+   tg(f"0 partite 90% oggi",cid,True)
  except Exception as e:
   tg(f"Errore Over90: {e}",cid,True)
 def run_bolla(cid=None):
  try:
-  tg("BOLLA 33 NAZIONI - 7 GIORNI - NOME + QUOTA 1.30 - Analizzo 5 min...",cid,True)
+  tg("BOLLA 33 NAZIONI 7 GIORNI - NOME + QUOTA 1.30 - Analizzo...",cid,True)
   now_dt=datetime.now(ROME)
   best={}
   for d in range(7):
@@ -309,7 +299,7 @@ def run_bolla(cid=None):
     try:
      fd=fx.get("fixture",{}).get("date","").replace("Z","+00:00")
      fdt=datetime.fromisoformat(fd).astimezone(ROME)
-    except:
+    except Exception:
      continue
     if fdt<now_dt:
      continue
@@ -333,19 +323,16 @@ def run_bolla(cid=None):
     if co not in best or perc>best[co][0]:
      best[co]=(perc,odd,txt)
   if not best:
-   tg("Nessuna partita valida per BOLLA nei prossimi 7 giorni",cid,True)
+   tg("Nessuna partita BOLLA 7 giorni",cid,True)
    return
   lista=list(best.values())
   lista.sort(key=lambda x: x[0], reverse=True)
   quota=1.0
-  out=f"BOLLA EUROPA 33 NAZIONI - 7 GIORNI - {len(lista)} NAZIONI MAX\n\n"
+  out=f"BOLLA EUROPA 33 NAZIONI - 7 GIORNI - {len(lista)} NAZIONI\n\n"
   for i,(p,o,t) in enumerate(lista,1):
    quota*=o
    out+=f"{i}. {t}\n"
-  out+=f"\nTOT NAZIONI: {len(lista)}\n"
-  out+=f"QUOTA TOTALE: {quota:.2f}\n"
-  out+=f"Con 1.30 x {len(lista)} = {pow(1.3,len(lista)):.2f}\n"
-  out+=f"Esempio 2EUR -> {quota*2:.2f} EUR"
+  out+=f"\nTOT: {len(lista)} QUOTA: {quota:.2f}\n"
   if len(out)>3500:
    tg(out[:3500],cid,True)
    tg(out[3500:],cid,True)
@@ -391,4 +378,23 @@ def run_doppia(cid=None):
   else:
    tg("Nessuna DOPPIA oggi",cid,True)
  except Exception as e:
- 
+  tg(f"Errore doppia {e}",cid,True)
+def poll():
+ global is_paused,last_id
+ try:
+  if BOT:
+   requests.get("https://api.telegram.org/bot"+BOT+"/deleteWebhook?drop_pending_updates=true",timeout=10)
+ except Exception:
+  pass
+ while True:
+  try:
+   if not BOT:
+    time.sleep(20)
+    continue
+   base="https://api.telegram.org/bot"+BOT
+   url=base+"/getUpdates?offset="+str(last_id+1)+"&timeout=20"
+   r=requests.get(url,timeout=30).json()
+   if r.get("ok"):
+    for u in r.get("result",[]):
+     last_id=u["update_id"]
+     msg
