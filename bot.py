@@ -123,8 +123,82 @@ def run_bolla(cid=None,auto=False):
    country=f.get("league",{}).get("country")
    if country not in TOP_LEAGUES: continue
    if f.get("league",{}).get("id")!=TOP_LEAGUES.get(country): continue
-   if is_youth_league(f.get("league",{}).get("name","")): continue
+   ln=f.get("league",{}).get("name","")
+   if is_youth_league(ln): continue
    if f.get("fixture",{}).get("status",{}).get("short")!="NS": continue
    try: f_dt=datetime.fromisoformat(f.get("fixture",{}).get("date","").replace("Z","+00:00")).astimezone(ROME)
    except: continue
-   if f
+   if f_dt < now_dt: continue
+   checked+=1
+   if checked>25: break
+   home_id=f.get("teams",{}).get("home",{}).get("id"); away_id=f.get("teams",{}).get("away",{}).get("id")
+   best=get_best_stat_90(home_id,away_id)
+   if best=="LIMIT": time.sleep(65); best=get_best_stat_90(home_id,away_id)
+   if not best or best=="LIMIT": continue
+   ora=f_dt.strftime("%H:%M"); league_name=f.get("league",{}).get("name",""); home=f.get("teams",{}).get("home",{}).get("name"); away=f.get("teams",{}).get("away",{}).get("name")
+   sel.append(f"{ora} [{country} - {league_name}] {home} vs {away} -> {best}")
+   if len(sel)>=33: break
+  if not sel:
+    data2=api(f"https://v3.football.api-sports.io/fixtures?date={tomorrow}") or []
+    if data2!="LIMIT":
+      for f in data2:
+        country=f.get("league",{}).get("country")
+        if country not in TOP_LEAGUES: continue
+        if f.get("league",{}).get("id")!=TOP_LEAGUES.get(country): continue
+        ln=f.get("league",{}).get("name","")
+        if is_youth_league(ln): continue
+        if f.get("fixture",{}).get("status",{}).get("short")!="NS": continue
+        home_id=f.get("teams",{}).get("home",{}).get("id"); away_id=f.get("teams",{}).get("away",{}).get("id")
+        best=get_best_stat_90(home_id,away_id)
+        if not best or best=="LIMIT": continue
+        try: f_dt=datetime.fromisoformat(f.get("fixture",{}).get("date","").replace("Z","+00:00")).astimezone(ROME)
+        except: continue
+        ora=f_dt.strftime("%d %H:%M"); league_name=f.get("league",{}).get("name",""); home=f.get("teams",{}).get("home",{}).get("name"); away=f.get("teams",{}).get("away",{}).get("name")
+        sel.append(f"{ora} [{country} - {league_name}] {home} vs {away} -> {best}")
+        if len(sel)>=15: break
+      if sel:
+        out_txt=f"BOLLA MISTA 90% DOMANI - {len(sel)} partite (oggi finite, ti do domani)\n\n"
+        for i,m in enumerate(sel,1): out_txt+=f"{i}. {m}\n"
+        tg(out_txt,cid,True); return
+  if sel:
+   out_txt=f"BOLLA MISTA 90% - {len(sel)} partite odierne (90% ultime 10)\n\n"
+   for i,m in enumerate(sel,1): out_txt+=f"{i}. {m}\n"
+   tg(out_txt,cid,True)
+  else:
+   tg(f"0 partite 90% trovate. Controllate {checked} odierne. Domani mattina alle 9 ne trova 20-30.",cid,True)
+ except Exception as e: tg(f"Errore bolla: {e}",cid,True)
+def run_doppia(cid=None,auto=False):
+    data=get_fixtures_today()
+    if not data or data=="LIMIT": return
+    out=[]
+    if not auto: tg("Cerco OVER 1.5...",cid,True)
+    for f in data:
+        try:
+            country=f.get("league",{}).get("country")
+            if country not in TOP_LEAGUES: continue
+            ln=f.get("league",{}).get("name","")
+            if is_youth_league(ln): continue
+            if f.get("fixture",{}).get("status",{}).get("short")!="NS": continue
+            if f.get("league",{}).get("id")!=TOP_LEAGUES.get(country): continue
+            fid=f.get("fixture",{}).get("id")
+            over_odd=get_over_15(fid)
+            if over_odd is None or over_odd>1.55: continue
+            ora=str(f.get("fixture",{}).get("date",""))[11:16]
+            league_name=f.get("league",{}).get("name",""); home=f.get("teams",{}).get("home",{}).get("name"); away=f.get("teams",{}).get("away",{}).get("name")
+            out.append(f"{ora} [{country} - {league_name}] {home} vs {away} OVER 1.5 @ {over_odd}")
+            time.sleep(0.4)
+            if len(out)>=15: break
+        except: continue
+    if out:
+        out_txt="DOPPIA "+str(len(out))+" OVER 1.5 CON NAZIONI\n\n"
+        for i,m in enumerate(out,1): out_txt+=f"{i}. {m}\n"
+        tg(out_txt,cid,True)
+    else:
+        if not auto: tg("Oggi nessun OVER 1.5",cid,True)
+def poll():
+ global is_paused,last_id
+ try:
+  if BOT: requests.get("https://api.telegram.org/bot"+BOT+"/deleteWebhook?drop_pending_updates=true",timeout=10)
+ except: pass
+ while True:
+ 
