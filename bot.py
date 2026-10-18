@@ -172,123 +172,147 @@ def get_corner_avg_team(team_id):
   return None
 def run_corner_over65(cid=None):
  try:
-  tg("OVER 6.5 ANGOLI - 7 GIORNI - Analizzo...",cid,True)
+  tg("OVER 6.5 ANGOLI - PRE MATCH - Analizzo...",cid,True)
+  today=datetime.now(ROME).strftime("%Y-%m-%d")
+  data=api(f"https://v3.football.api-sports.io/fixtures?date={today}") or []
   now_dt=datetime.now(ROME)
   sel=[]
-  for d in range(7):
-   dt_str=(datetime.now(ROME)+timedelta(days=d)).strftime("%Y-%m-%d")
-   data=api(f"https://v3.football.api-sports.io/fixtures?date={dt_str}") or []
-   for fx in data:
-    lg=fx.get("league",{})
-    co=lg.get("country")
-    if co not in TOP: continue
-    if lg.get("id")!=TOP.get(co): continue
-    if is_youth(lg.get("name","")): continue
-    if fx.get("fixture",{}).get("status",{}).get("short")!="NS": continue
-    try:
-     fd=fx.get("fixture",{}).get("date","").replace("Z","+00:00")
-     fdt=datetime.fromisoformat(fd).astimezone(ROME)
-    except: continue
-    if fdt<now_dt: continue
-    tm=fx.get("teams",{})
-    hid=tm.get("home",{}).get("id")
-    aid=tm.get("away",{}).get("id")
+  chk=0
+  for fx in data:
+   lg=fx.get("league",{})
+   co=lg.get("country")
+   if co not in TOP:
+    continue
+   if lg.get("id")!=TOP.get(co):
+    continue
+   if is_youth(lg.get("name","")):
+    continue
+   if fx.get("fixture",{}).get("status",{}).get("short")!="NS":
+    continue
+   try:
+    fd=fx.get("fixture",{}).get("date","").replace("Z","+00:00")
+    fdt=datetime.fromisoformat(fd).astimezone(ROME)
+   except:
+    continue
+   if fdt<now_dt:
+    continue
+   chk+=1
+   if chk>12:
+    break
+   tm=fx.get("teams",{})
+   hid=tm.get("home",{}).get("id")
+   aid=tm.get("away",{}).get("id")
+   c1=get_corner_avg_team(hid)
+   if c1=="LIMIT":
+    time.sleep(60)
     c1=get_corner_avg_team(hid)
-    if c1=="LIMIT":
-     time.sleep(60)
-     c1=get_corner_avg_team(hid)
-    if c1 is None: continue
-    time.sleep(0.4)
+   if c1 is None:
+    continue
+   time.sleep(0.4)
+   c2=get_corner_avg_team(aid)
+   if c2=="LIMIT":
+    time.sleep(60)
     c2=get_corner_avg_team(aid)
-    if c2=="LIMIT":
-     time.sleep(60)
-     c2=get_corner_avg_team(aid)
-    if c2 is None: continue
-    avg=(c1+c2)/2
-    if avg>=6.5:
-     ora=fdt.strftime("%d/%m %H:%M")
-     hn=tm.get("home",{}).get("name")
-     an=tm.get("away",{}).get("name")
-     sel.append((avg,f"{ora} [{co}] {hn} vs {an} -> {avg:.1f} OVER 6.5"))
-    if len(sel)>=20: break
-   if len(sel)>=20: break
+   if c2 is None:
+    continue
+   avg=(c1+c2)/2
+   if avg>=6.5:
+    ora=fdt.strftime("%H:%M")
+    hn=tm.get("home",{}).get("name")
+    an=tm.get("away",{}).get("name")
+    sel.append((avg,f"{ora} [{co}] {hn} vs {an} -> Media {avg:.1f} - OVER 6.5"))
   if sel:
    sel.sort(key=lambda x: x[0], reverse=True)
-   out=f"OVER 6.5 ANGOLI 7 GIORNI - {len(sel)} partite\n\n"
+   out=f"OVER 6.5 ANGOLI PRE MATCH - {len(sel)} partite OGGI (su {chk})\n\n"
    for i,(a,m) in enumerate(sel,1):
     out+=f"{i}. {m}\n"
    tg(out,cid,True)
   else:
-   tg("0 partite Over 6.5 nei prossimi 7 giorni",cid,True)
+   tg(f"0 partite con media Over 6.5 oggi. Analizzate {chk}",cid,True)
  except Exception as e:
-  tg(f"Errore Corner: {e}",cid,True)
-
+  tg(f"Errore Corner Over 6.5: {e}",cid,True)
 def run_over90(cid=None):
  try:
-  tg("OVER 1.5 90% - 7 GIORNI - Analizzo...",cid,True)
+  tg("OVER 1.5 90% NAZIONI - Analizzo...",cid,True)
+  today=datetime.now(ROME).strftime("%Y-%m-%d")
+  data=api(f"https://v3.football.api-sports.io/fixtures?date={today}") or []
+  if data=="LIMIT":
+   data=[]
   now_dt=datetime.now(ROME)
   sel=[]
-  for d in range(7):
-   dt_str=(datetime.now(ROME)+timedelta(days=d)).strftime("%Y-%m-%d")
-   data=api(f"https://v3.football.api-sports.io/fixtures?date={dt_str}") or []
-   if data=="LIMIT": data=[]
-   for fx in data:
-    lg=fx.get("league",{})
-    co=lg.get("country")
-    if co not in TOP: continue
-    if lg.get("id")!=TOP.get(co): continue
-    if is_youth(lg.get("name","")): continue
-    if fx.get("fixture",{}).get("status",{}).get("short")!="NS": continue
-    try:
-     fd=fx.get("fixture",{}).get("date","").replace("Z","+00:00")
-     fdt=datetime.fromisoformat(fd).astimezone(ROME)
-    except: continue
-    if fdt<now_dt: continue
-    tm=fx.get("teams",{})
-    hid=tm.get("home",{}).get("id")
-    aid=tm.get("away",{}).get("id")
+  chk=0
+  for fx in data:
+   lg=fx.get("league",{})
+   co=lg.get("country")
+   if co not in TOP:
+    continue
+   if lg.get("id")!=TOP.get(co):
+    continue
+   if is_youth(lg.get("name","")):
+    continue
+   if fx.get("fixture",{}).get("status",{}).get("short")!="NS":
+    continue
+   try:
+    fd=fx.get("fixture",{}).get("date","").replace("Z","+00:00")
+    fdt=datetime.fromisoformat(fd).astimezone(ROME)
+   except:
+    continue
+   if fdt<now_dt:
+    continue
+   chk+=1
+   if chk>30:
+    break
+   tm=fx.get("teams",{})
+   hid=tm.get("home",{}).get("id")
+   aid=tm.get("away",{}).get("id")
+   perc=get_best90(hid,aid)
+   if perc=="LIMIT":
+    time.sleep(60)
     perc=get_best90(hid,aid)
-    if perc=="LIMIT":
-     time.sleep(60)
-     perc=get_best90(hid,aid)
-    if not perc: continue
-    ora=fdt.strftime("%d/%m %H:%M")
-    hn=tm.get("home",{}).get("name")
-    an=tm.get("away",{}).get("name")
-    ln=lg.get("name","")
-    sel.append(f"{ora} [{co} - {ln}] {hn} vs {an} -> {perc:.0f}%")
-    if len(sel)>=30: break
-   if len(sel)>=30: break
+   if not perc:
+    continue
+   ora=fdt.strftime("%H:%M")
+   hn=tm.get("home",{}).get("name")
+   an=tm.get("away",{}).get("name")
+   ln=lg.get("name","")
+   sel.append(f"{ora} [{co} - {ln}] {hn} vs {an} -> Over 1.5 @ {perc:.0f}%")
+   if len(sel)>=20:
+    break
   if sel:
-   out=f"OVER 1.5 90% - 7 GIORNI - {len(sel)} partite\n\n"
+   out=f"OVER 1.5 90% NAZIONI - {len(sel)} partite\n\n"
    for i,m in enumerate(sel,1):
     out+=f"{i}. {m}\n"
    tg(out,cid,True)
   else:
-   tg("0 partite 90% nei prossimi 7 giorni",cid,True)
+   tg(f"0 partite 90% oggi. Controllate {chk}",cid,True)
  except Exception as e:
   tg(f"Errore Over90: {e}",cid,True)
-
 def run_bolla(cid=None):
  try:
   tg("BOLLA 33 NAZIONI - 7 GIORNI - NOME + QUOTA 1.30 - Analizzo 5 min...",cid,True)
   now_dt=datetime.now(ROME)
-  best_per_country={}
+  best={}
   for d in range(7):
-   dt_str=(datetime.now(ROME)+timedelta(days=d)).strftime("%Y-%m-%d")
-   data=api(f"https://v3.football.api-sports.io/fixtures?date={dt_str}") or []
+   ds=(datetime.now(ROME)+timedelta(days=d)).strftime("%Y-%m-%d")
+   data=api(f"https://v3.football.api-sports.io/fixtures?date={ds}") or []
    for fx in data:
     lg=fx.get("league",{})
     co=lg.get("country")
-    if co not in TOP: continue
-    if lg.get("id")!=TOP.get(co): continue
-    if is_youth(lg.get("name","")): continue
-    if fx.get("fixture",{}).get("status",{}).get("short")!="NS": continue
+    if co not in TOP:
+     continue
+    if lg.get("id")!=TOP.get(co):
+     continue
+    if is_youth(lg.get("name","")):
+     continue
+    if fx.get("fixture",{}).get("status",{}).get("short")!="NS":
+     continue
     try:
      fd=fx.get("fixture",{}).get("date","").replace("Z","+00:00")
      fdt=datetime.fromisoformat(fd).astimezone(ROME)
-    except: continue
-    if fdt<now_dt: continue
+    except:
+     continue
+    if fdt<now_dt:
+     continue
     tm=fx.get("teams",{})
     hid=tm.get("home",{}).get("id")
     aid=tm.get("away",{}).get("id")
@@ -296,25 +320,75 @@ def run_bolla(cid=None):
     if perc=="LIMIT":
      time.sleep(60)
      perc=get_best90(hid,aid)
-    if not perc or perc<80: continue
+    if not perc or perc<80:
+     continue
     fid=fx.get("fixture",{}).get("id")
     odd=get_over_odd(fid)
-    if odd is None or odd<1.20 or odd>1.40: continue
+    if odd is None or odd<1.20 or odd>1.40:
+     continue
     ora=fdt.strftime("%d/%m %H:%M")
     hn=tm.get("home",{}).get("name")
     an=tm.get("away",{}).get("name")
-    testo=f"{ora} {hn} vs {an} [{co}] Over 1.5 @ {odd} ({perc:.0f}%)"
-    if co not in best_per_country or perc>best_per_country[co][0]:
-     best_per_country[co]=(perc,odd,testo)
-   time.sleep(0.5)
-  if not best_per_country:
+    txt=f"{ora} {hn} vs {an} [{co}] Over 1.5 @ {odd} ({perc:.0f}%)"
+    if co not in best or perc>best[co][0]:
+     best[co]=(perc,odd,txt)
+  if not best:
    tg("Nessuna partita valida per BOLLA nei prossimi 7 giorni",cid,True)
    return
-  lista=list(best_per_country.values())
+  lista=list(best.values())
   lista.sort(key=lambda x: x[0], reverse=True)
-  quota_tot=1.0
+  quota=1.0
   out=f"BOLLA EUROPA 33 NAZIONI - 7 GIORNI - {len(lista)} NAZIONI MAX\n\n"
-  for i,(perc,odd,testo) in enumerate(lista,1):
-   quota_tot*=odd
-   out+=f"{i}. {testo}\n"
-  out+=f
+  for i,(p,o,t) in enumerate(lista,1):
+   quota*=o
+   out+=f"{i}. {t}\n"
+  out+=f"\nTOT NAZIONI: {len(lista)}\n"
+  out+=f"QUOTA TOTALE: {quota:.2f}\n"
+  out+=f"Con 1.30 x {len(lista)} = {pow(1.3,len(lista)):.2f}\n"
+  out+=f"Esempio 2EUR -> {quota*2:.2f} EUR"
+  if len(out)>3500:
+   tg(out[:3500],cid,True)
+   tg(out[3500:],cid,True)
+  else:
+   tg(out,cid,True)
+ except Exception as e:
+  tg(f"Errore Bolla: {e}",cid,True)
+def run_doppia(cid=None):
+ try:
+  today=datetime.now(ROME).strftime("%Y-%m-%d")
+  data=api(f"https://v3.football.api-sports.io/fixtures?date={today}") or []
+  out=[]
+  tg("Cerco DOPPIA...",cid,True)
+  for fx in data:
+   lg=fx.get("league",{})
+   co=lg.get("country")
+   if co not in TOP:
+    continue
+   if lg.get("id")!=TOP.get(co):
+    continue
+   if is_youth(lg.get("name","")):
+    continue
+   if fx.get("fixture",{}).get("status",{}).get("short")!="NS":
+    continue
+   fid=fx.get("fixture",{}).get("id")
+   odd=get_over_odd(fid)
+   if odd is None or odd>1.55:
+    continue
+   ora=str(fx.get("fixture",{}).get("date",""))[11:16]
+   tm=fx.get("teams",{})
+   hn=tm.get("home",{}).get("name")
+   an=tm.get("away",{}).get("name")
+   ln=lg.get("name","")
+   out.append(f"{ora} [{co} - {ln}] {hn} vs {an} OVER 1.5 @ {odd}")
+   time.sleep(0.3)
+   if len(out)>=15:
+    break
+  if out:
+   txt="DOPPIA "+str(len(out))+" OVER 1.5\n\n"
+   for i,m in enumerate(out,1):
+    txt+=f"{i}. {m}\n"
+   tg(txt,cid,True)
+  else:
+   tg("Nessuna DOPPIA oggi",cid,True)
+ except Exception as e:
+ 
