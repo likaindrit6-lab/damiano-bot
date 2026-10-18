@@ -136,7 +136,6 @@ def get_best90(hid,aid):
   return None
  except:
   return None
-
 def get_corner_avg_team(team_id):
  try:
   u=f"https://v3.football.api-sports.io/fixtures?team={team_id}&last=10&status=FT"
@@ -171,7 +170,6 @@ def get_corner_avg_team(team_id):
   return tot/cnt
  except:
   return None
-
 def run_corner_over65(cid=None):
  try:
   tg("OVER 6.5 ANGOLI - PRE MATCH - STATS 10 PARTITE - Analizzo 3 min...",cid,True)
@@ -222,7 +220,7 @@ def run_corner_over65(cid=None):
     ora=fdt.strftime("%H:%M")
     hn=tm.get("home",{}).get("name")
     an=tm.get("away",{}).get("name")
-    sel.append((avg,f"{ora} [{co}] {hn} vs {an} -> Media {avg:.1f} corner - OVER 6.5"))
+    sel.append((avg,f"{ora} [{co}] {hn} vs {an} -> Media {avg:.1f} - OVER 6.5"))
   if sel:
    sel.sort(key=lambda x: x[0], reverse=True)
    out=f"OVER 6.5 ANGOLI PRE MATCH - {len(sel)} partite OGGI (su {chk})\n\n"
@@ -233,7 +231,6 @@ def run_corner_over65(cid=None):
    tg(f"0 partite con media Over 6.5 oggi. Analizzate {chk}",cid,True)
  except Exception as e:
   tg(f"Errore Corner Over 6.5: {e}",cid,True)
-
 def run_over90(cid=None):
  try:
   tg("OVER 1.5 90% NAZIONI - Analizzo...",cid,True)
@@ -434,7 +431,7 @@ def live_loop():
          stato="PAREGGIA" if sg==fg else "VANTAGGIO"
          ns=home if tipo=="HOME" else away
          nf=away if tipo=="HOME" else home
-         tg(f"SFIGATA {stato} {mm}' {label} {home} {gh}-{ga} {away}\nSfigata {ns} @{qs}\nFavorita {nf} @{qf}")
+         tg(f"⚫ SFIGATA {stato} {mm}' {label} {home} {gh}-{ga} {away}\nSfigata {ns} @{qs}\nFavorita {nf} @{qf}")
     if 30<=mm<=45 and fid not in av_s_first:
      u="https://v3.football.api-sports.io/fixtures/statistics?fixture="+str(fid)
      st=api(u)
@@ -455,7 +452,7 @@ def live_loop():
          except:
           pass
      if sot>=4 or cor>=6:
-      tg(f"PREPARATI {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot}")
+      tg(f"🔥 PREPARATI {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}")
       av_s_first.add(fid)
     if 65<=mm<=90 and fid not in av_s:
      u="https://v3.football.api-sports.io/fixtures/statistics?fixture="+str(fid)
@@ -477,7 +474,7 @@ def live_loop():
          except:
           pass
      if sot>=4 or cor>=6:
-      tg(f"GIOCALO {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}")
+      tg(f"🚀 GIOCALO {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}")
       av_s.add(fid)
       av_g[fid]=gh+ga
    for g in games:
@@ -491,7 +488,7 @@ def live_loop():
       tm=g.get("teams",{})
       hn=tm.get("home",{}).get("name")
       an=tm.get("away",{}).get("name")
-      tg(f"GOAL VINTO! {label} {hn} {gh2}-{ga2} {an}")
+      tg(f"🟢 GOAL VINTO! {label} {hn} {gh2}-{ga2} {an}")
       del av_g[fid]
    time.sleep(60)
   except Exception as e:
