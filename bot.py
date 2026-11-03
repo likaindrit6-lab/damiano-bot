@@ -1,12 +1,10 @@
 import os,time,requests,threading,json
 from flask import Flask
 from datetime import datetime,timezone,timedelta
-from zoneinfo import ZoneInfo
 BOT=os.getenv("BOT_TOKEN")
 CHAT=os.getenv("CHAT_ID")
 KEY=os.getenv("API_FOOTBALL_KEY")
 ITALY=timezone(timedelta(hours=2))
-ROME=ZoneInfo("Europe/Rome")
 is_paused=False
 last_id=0
 av_g={}
@@ -14,18 +12,12 @@ av_s=set()
 av_s_first=set()
 av_sfiga_score={}
 
-def is_youth(n):
- b=n.lower()
- for x in ["u19","u21","u23","u17","women","youth","reserve"]:
-  if x in b: return True
- return False
-
 app=Flask(__name__)
 @app.route("/")
 def home():
- return "BOT V62 MINI FIX",200
+ return "BOT V63 STABILE - SOLO COLORI",200
 
-TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI","OVER 3.5 WORLDWIDE"],["BAD BUILDER 1.82 WORLDWIDE"],["STATUS"],["ACCENDI","SPEGNI"]],"resize_keyboard":True})
+TAST=json.dumps({"keyboard":[["OVER 1.5 90%"],["STATUS"],["ACCENDI","SPEGNI"]],"resize_keyboard":True})
 
 def tg(m,cid=None,keys=False):
  try:
@@ -33,26 +25,22 @@ def tg(m,cid=None,keys=False):
   if not cid or not BOT: return
   base="https://api.telegram.org/bot"+BOT
   pay={"chat_id":cid,"text":m,"parse_mode":"HTML"}
-  if keys:
-   import json as js
-   pay["reply_markup"]=js.loads(TAST)
-  requests.post(base+"/sendMessage",json=pay,timeout=20)
- except Exception as e:
-  print(e)
+  if keys: pay["reply_markup"]=json.loads(TAST)
+  requests.post(base+"/sendMessage",json=pay,timeout=15)
+ except Exception as e: print(e)
 
 def api(url):
  try:
-  r=requests.get(url,headers={"x-apisports-key":KEY},timeout=30)
+  r=requests.get(url,headers={"x-apisports-key":KEY},timeout=25)
   if r.status_code==429: return "LIMIT"
   return r.json().get("response",[])
- except Exception:
-  return []
+ except Exception: return []
 
 def get_sfigata(fid):
  try:
   data=api(f"https://v3.football.api-sports.io/odds?fixture={fid}")
   if not data or data=="LIMIT": return None
-  for book in data[0].get("bookmakers",[])[:2]:
+  for book in data[0].get("bookmakers",[])[:1]:
    for bet in book.get("bets",[]):
     if bet.get("name")=="Match Winner":
      q={}
@@ -60,42 +48,37 @@ def get_sfigata(fid):
       try: q[v.get("value")]=float(v.get("odd"))
       except: pass
      h=q.get("Home",0); a=q.get("Away",0)
-     if h>=4.5 and h>a and a<=1.8: return ("HOME",h,"AWAY",a)
-     if a>=4.5 and a>h and h<=1.8: return ("AWAY",a,"HOME",h)
- except Exception:
-  return None
+     if h>=4.5 and a<=1.8: return ("HOME",h,"AWAY",a)
+     if a>=4.5 and h<=1.8: return ("AWAY",a,"HOME",h)
+ except Exception: return None
 
 def poll():
  global is_paused,last_id
  try:
-  if BOT:
-   requests.get("https://api.telegram.org/bot"+BOT+"/deleteWebhook?drop_pending_updates=true",timeout=10)
+  if BOT: requests.get("https://api.telegram.org/bot"+BOT+"/deleteWebhook?drop_pending_updates=true",timeout=10)
  except: pass
  while True:
   try:
    if not BOT: time.sleep(20); continue
    base="https://api.telegram.org/bot"+BOT
-   url=base+"/getUpdates?offset="+str(last_id+1)+"&timeout=20"
-   r=requests.get(url,timeout=30).json()
+   r=requests.get(base+f"/getUpdates?offset={last_id+1}&timeout=15",timeout=25).json()
    if r.get("ok"):
     for u in r.get("result",[]):
      last_id=u["update_id"]
-     msg=u.get("message",{})
-     txt=(msg.get("text") or "").strip()
-     low=txt.lower()
+     msg=u.get("message",{}); txt=(msg.get("text") or "").strip(); low=txt.lower()
      cid=msg.get("chat",{}).get("id")
      if not txt: continue
      if "spegni" in low: is_paused=True; tg("PAUSA",cid,True); continue
-     if "accendi" in low or "/start" in low: is_paused=False; tg("V62 MINI ATTIVO",cid,True); continue
-     if "status" in low: tg("STATUS V62 MINI OK - LIVE ATTIVI",cid,True); continue
+     if "accendi" in low or "/start" in low: is_paused=False; tg("BOT V63 ATTIVO - SOLO COLORI",cid,True); continue
+     if "status" in low: tg("STATUS V63 OK - LIVE ATTIVI",cid,True); continue
   except: pass
-  time.sleep(2)
+  time.sleep(3)
 
 def live_loop():
- tg("BOT V62 MINI LIVE + COLORI",None,True)
+ tg("BOT V63 LIVE - COLORI ATTIVI",None,True)
  while True:
   try:
-   if is_paused: time.sleep(30); continue
+   if is_paused: time.sleep(20); continue
    now=datetime.now(ITALY)
    if 2<=now.hour<6: time.sleep(300); continue
    games=api("https://v3.football.api-sports.io/fixtures?live=all")
@@ -118,16 +101,15 @@ def live_loop():
        tipo,qs,tf,qf=sf
        chi="HOME" if gh>oh else "AWAY"
        if chi==tipo:
-        sg=gh if tipo=="HOME" else ga
-        fg=ga if tipo=="HOME" else gh
+        sg=gh if tipo=="HOME" else ga; fg=ga if tipo=="HOME" else gh
         if sg>=fg:
          stato="PAREGGIA" if sg==fg else "VANTAGGIO"
          ns=home if tipo=="HOME" else away
          nf=away if tipo=="HOME" else home
-         tg(f"BLACK SFIGATA {stato} {mm}' {label} {home} {gh}-{ga} {away} Sfigata {ns} @{qs}")
+         tg(f"⚫ SFIGATA {stato} {mm}' {label} {home} {gh}-{ga} {away}\nSfigata {ns} @{qs}\nFavorita {nf} @{qf}")
     if 30<=mm<=45 and fid not in av_s_first:
      st=api(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
-     if st=="LIMIT": time.sleep(70); continue
+     if st=="LIMIT": time.sleep(80); continue
      sot=0; cor=0
      if st and len(st)>=2:
       for s in st:
@@ -140,11 +122,11 @@ def live_loop():
          try: cor+=int(str(x.get("value") or 0))
          except: pass
      if sot>=4 or cor>=6:
-      tg(f"FIRE PREPARATI {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}")
+      tg(f"🔥 PREPARATI {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}")
       av_s_first.add(fid)
     if 65<=mm<=90 and fid not in av_s:
      st=api(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
-     if st=="LIMIT": time.sleep(70); continue
+     if st=="LIMIT": time.sleep(80); continue
      sot=0; cor=0
      if st and len(st)>=2:
       for s in st:
@@ -157,7 +139,7 @@ def live_loop():
          try: cor+=int(str(x.get("value") or 0))
          except: pass
      if sot>=4 or cor>=6:
-      tg(f"ROCKET GIOCALO {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}")
+      tg(f"🚀 GIOCALO {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}")
       av_s.add(fid); av_g[fid]=gh+ga
    for g in games:
     fid=g.get("fixture",{}).get("id")
@@ -166,11 +148,11 @@ def live_loop():
      if gh2+ga2>av_g[fid]:
       lg=g.get("league",{}); label=f"[{lg.get('country','')} - {lg.get('name','')}]"
       tm=g.get("teams",{}); hn=tm.get("home",{}).get("name"); an=tm.get("away",{}).get("name")
-      tg(f"GREEN GOAL VINTO! {label} {hn} {gh2}-{ga2} {an}")
+      tg(f"🟢 GOAL VINTO! {label} {hn} {gh2}-{ga2} {an}")
       del av_g[fid]
-   time.sleep(75)
+   time.sleep(90)
   except Exception as e:
-   print(e); time.sleep(15)
+   print(e); time.sleep(20)
 
 threading.Thread(target=poll,daemon=True).start()
 threading.Thread(target=live_loop,daemon=True).start()
