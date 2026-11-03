@@ -33,7 +33,7 @@ def is_youth(n):
 app=Flask(__name__)
 @app.route("/")
 def home():
- return "BOT V54 FULL + OVER 1.5 90% + BUILDER WORLDWIDE",200
+ return "BOT V55 BAD BUILDER INTELLIGENTE",200
 TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
 TAST_C=json.dumps({"keyboard":[["APRI MENU"]],"resize_keyboard":True})
 def tg(m,cid=None,keys=False,chiusa=False):
@@ -170,6 +170,93 @@ def get_corner_avg_team(team_id):
   return tot/cnt
  except:
   return None
+def get_team_deep_stats(team_id):
+ try:
+  u=f"https://v3.football.api-sports.io/fixtures?team={team_id}&last=10&status=FT"
+  data=api(u)
+  if not data or data=="LIMIT" or len(data)<4:
+   return None
+  over15=0
+  gol_fatti=0
+  angoli=0
+  gialli=0
+  tiri=0
+  cnt=0
+  cnt_stats=0
+  for fx in data[:8]:
+   fid=fx.get("fixture",{}).get("id")
+   gh=fx.get("goals",{}).get("home") or 0
+   ga=fx.get("goals",{}).get("away") or 0
+   is_home=fx.get("teams",{}).get("home",{}).get("id")==team_id
+   gf=gh if is_home else ga
+   if gh+ga>=2:
+    over15+=1
+   gol_fatti+=gf
+   st=api(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
+   if st=="LIMIT":
+    time.sleep(1)
+    continue
+   if not st:
+    continue
+   for ts in st:
+    if ts.get("team",{}).get("id")!=team_id:
+     continue
+    for x in ts.get("statistics",[]):
+     tp=(x.get("type") or "").lower()
+     val=x.get("value")
+     if val is None:
+      continue
+     try:
+      v=int(str(val))
+     except:
+      continue
+     if "corner" in tp:
+      angoli+=v
+     if "yellow" in tp:
+      gialli+=v
+     if "shots on goal" in tp:
+      tiri+=v
+   cnt+=1
+   cnt_stats+=1
+   time.sleep(0.2)
+  if cnt==0:
+   return None
+  return {"over15_pct":over15/cnt*100,"gol_avg":gol_fatti/cnt,"angoli_avg":angoli/max(1,cnt_stats),"gialli_avg":gialli/max(1,cnt_stats),"tiri_avg":tiri/max(1,cnt_stats),"partite":cnt}
+ except:
+  return None
+def build_intelligent_builder(home_stats,away_stats,home_name,away_name):
+ legs=[]
+ quota=1.0
+ if home_stats["gol_avg"]>=1.0 and home_stats["over15_pct"]>=70:
+  legs.append(f"OVER 0.5 {home_name} @1.12")
+  quota*=1.12
+ if away_stats["gol_avg"]>=0.9 and away_stats["over15_pct"]>=70:
+  legs.append(f"OVER 0.5 {away_name} @1.15")
+  quota*=1.15
+ if home_stats["over15_pct"]<60 and away_stats["over15_pct"]<60:
+  legs.append("UNDER 4.5 GOL @1.10")
+  quota*=1.10
+ elif home_stats["over15_pct"]>=80 or away_stats["over15_pct"]>=80:
+  legs.append("OVER 1.5 GOL @1.18")
+  quota*=1.18
+ avg_ang=(home_stats["angoli_avg"]+away_stats["angoli_avg"])/2
+ if avg_ang>=4.0:
+  legs.append("OVER 6.5 ANGOLI @1.18")
+  quota*=1.18
+ elif avg_ang>=3.0:
+  legs.append("OVER 4.5 ANGOLI @1.12")
+  quota*=1.12
+ if home_stats["gialli_avg"]>=1.8 or away_stats["gialli_avg"]>=1.8:
+  legs.append("OVER 1.5 CARTELLINI @1.15")
+  quota*=1.15
+ if home_stats["tiri_avg"]>=3.5:
+  legs.append(f"OVER 0.5 TIRI {home_name} @1.10")
+  quota*=1.10
+ if len(legs)>=3 and 1.60<=quota<=1.95:
+  return legs,quota
+ if len(legs)>=4 and 1.50<=quota<=2.10:
+  return legs,quota
+ return None
 def run_corner_over65(cid=None):
  try:
   tg("OVER 6.5 ANGOLI - PRE MATCH - STATS 10 PARTITE - Analizzo 3 min...",cid,True)
@@ -328,107 +415,66 @@ def run_doppia(cid=None):
    tg("Nessuna DOPPIA oggi",cid,True)
  except Exception as e:
   tg(f"Errore doppia {e}",cid,True)
-
-# --- SOLO NUOVO: BAD BUILDER WORLDWIDE GIORNO E NOTTE ---
-def get_builder_odds(fid):
- try:
-  u="https://v3.football.api-sports.io/odds?fixture="+str(fid)
-  data=api(u)
-  if not data or data=="LIMIT":
-   return None
-  odds={}
-  for book in data[0].get("bookmakers",[])[:4]:
-   for bet in book.get("bets",[]):
-    bname=bet.get("name","")
-    for v in bet.get("values",[]):
-     try:
-      o=float(v.get("odd"))
-     except:
-      continue
-     val=v.get("value","")
-     if "Over 1.5" in val and "o15" not in odds:
-      odds["o15"]=o
-     if "Yes" in val and "Both Teams" in bname and "gg" not in odds:
-      odds["gg"]=o
-     if "Over 4.5" in val and "Corners" in bname and "o45c" not in odds:
-      odds["o45c"]=o
-     if "Over 6.5" in val and "Corners" in bname and "o65c" not in odds:
-      odds["o65c"]=o
-  return odds
- except:
-  return None
-
-def build_builder_combo(odds):
- combos=[]
- if "o15" in odds and "gg" in odds:
-  tot=odds["o15"]*odds["gg"]
-  if 1.65 <= tot <= 2.1:
-   combos.append((tot,f"OVER 1.5 ({odds['o15']}) + GG ({odds['gg']}) = {tot:.2f}"))
- if "o15" in odds and "o45c" in odds:
-  tot=odds["o15"]*odds["o45c"]
-  if 1.65 <= tot <= 2.1:
-   combos.append((tot,f"OVER 1.5 + OVER 4.5 Angoli = {tot:.2f}"))
- if "o65c" in odds:
-  if 1.65 <= odds["o65c"] <= 2.1:
-   combos.append((odds["o65c"],f"OVER 6.5 Angoli = {odds['o65c']:.2f}"))
- combos.sort(key=lambda x: abs(x[0]-1.82))
- return combos[0] if combos else None
-
 def run_bad_builder(cid=None):
  try:
-  tg("BAD BUILDER 1.82 WORLDWIDE - GIORNO E NOTTE - Cerco in TUTTO IL MONDO...",cid,True)
-  now_rome=datetime.now(ROME)
-  dates=[]
-  for i in range(3):
-   d=(now_rome+timedelta(days=i)).strftime("%Y-%m-%d")
-   dates.append(d)
+  tg("BAD BUILDER INTELLIGENTE 1.82 - SOLO OGGI - Analizzo STATS (gol, angoli, gialli, tiri)...",cid,True)
+  today=datetime.now(ROME).strftime("%Y-%m-%d")
+  data=api(f"https://v3.football.api-sports.io/fixtures?date={today}") or []
+  if data=="LIMIT":
+   tg("Limite API, riprovo tra 1 min",cid,True)
+   time.sleep(60)
+   data=api(f"https://v3.football.api-sports.io/fixtures?date={today}") or []
   sel=[]
-  for date in dates:
-   data=api(f"https://v3.football.api-sports.io/fixtures?date={date}") or []
-   if data=="LIMIT":
-    time.sleep(60)
+  now_dt=datetime.now(ROME)
+  for fx in data:
+   if fx.get("fixture",{}).get("status",{}).get("short")!="NS":
     continue
-   for fx in data:
-    if fx.get("fixture",{}).get("status",{}).get("short")!="NS":
+   lg=fx.get("league",{})
+   lname=lg.get("name","")
+   co=lg.get("country","")
+   if co in ["Ethiopia","Uganda","Mongolia","Tanzania","Kenya","Rwanda"]:
+    continue
+   if is_youth(lname):
+    continue
+   try:
+    fd=fx.get("fixture",{}).get("date","").replace("Z","+00:00")
+    fdt=datetime.fromisoformat(fd).astimezone(ROME)
+    if fdt<now_dt:
      continue
-    lg=fx.get("league",{})
-    if is_youth(lg.get("name","")):
-     continue
-    fid=fx.get("fixture",{}).get("id")
-    tm=fx.get("teams",{})
-    hn=tm.get("home",{}).get("name")
-    an=tm.get("away",{}).get("name")
-    co=lg.get("country")
-    ln=lg.get("name")
-    try:
-     fd=fx.get("fixture",{}).get("date","").replace("Z","+00:00")
-     fdt=datetime.fromisoformat(fd).astimezone(ROME)
-     ora=fdt.strftime("%d/%m %H:%M")
-    except:
-     ora=date
-    odds=get_builder_odds(fid)
-    if not odds or len(odds)<2:
-     time.sleep(0.2)
-     continue
-    combo=build_builder_combo(odds)
-    if combo:
-     tot,desc=combo
-     sel.append(f"{ora} [{co} - {ln}] {hn} vs {an}\n -> {desc}")
-    time.sleep(0.3)
-    if len(sel)>=15:
-     break
-   if len(sel)>=15:
+    ora=fdt.strftime("%H:%M")
+   except:
+    ora="oggi"
+   tm=fx.get("teams",{})
+   hid=tm.get("home",{}).get("id")
+   aid=tm.get("away",{}).get("id")
+   hn=tm.get("home",{}).get("name")
+   an=tm.get("away",{}).get("name")
+   hs=get_team_deep_stats(hid)
+   if hs is None:
+    time.sleep(0.5)
+    continue
+   time.sleep(0.3)
+   aws=get_team_deep_stats(aid)
+   if aws is None:
+    time.sleep(0.5)
+    continue
+   builder=build_intelligent_builder(hs,aws,hn,an)
+   if builder:
+    legs,quota=builder
+    desc="\n".join([f"   + {l}" for l in legs])
+    sel.append(f"{ora} [{co} - {lname}] {hn} vs {an}\n{desc}\n   = TOT @{quota:.2f}")
+   time.sleep(0.3)
+   if len(sel)>=10:
     break
   if sel:
-   out=f"BAD BUILDER 1.82 WORLDWIDE - {len(sel)} partite (MONDO)\n\n"
+   out=f"BAD BUILDER INTELLIGENTE - SOLO OGGI {today} - {len(sel)} partite\n\n"
    for i,m in enumerate(sel,1):
     out+=f"{i}. {m}\n\n"
    tg(out,cid,True)
   else:
-   tg("0 partite builder trovate in tutto il mondo adesso",cid,True)
+   tg(f"0 builder intelligenti trovati per OGGI {today}",cid,True)
  except Exception as e:
-  tg(f"Errore Builder: {e}",cid,True)
-
+  tg(f"Errore Builder Intelligente: {e}",cid,True)
 def poll():
  global is_paused,last_id
  try:
@@ -465,10 +511,10 @@ def poll():
       continue
      if "accendi" in low or "/start" in low:
       is_paused=False
-      tg("V54 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE",cid,True)
+      tg("V55 INTELLIGENTE ATTIVO",cid,True)
       continue
      if "status" in low:
-      tg("STATUS V54 FULL + BUILDER WORLDWIDE OK",cid,True)
+      tg("STATUS V55 INTELLIGENTE OK",cid,True)
       continue
      if "over 1.5" in low and "90" in low:
       run_over90(cid)
@@ -479,126 +525,4 @@ def poll():
      if "doppia" in low:
       run_doppia(cid)
       continue
-     if "angolo" in low and "builder" not in low:
-      run_corner_over65(cid)
-      continue
-     if "builder" in low:
-      run_bad_builder(cid)
-      continue
-  except:
-   pass
-  time.sleep(2)
-def live_loop():
- tg("BOT V54 FULL + OVER 1.5 90% + BUILDER WORLDWIDE ATTIVO",None,True)
- while True:
-  try:
-   if is_paused:
-    time.sleep(30)
-    continue
-   now=datetime.now(ITALY)
-   if 2<=now.hour<6:
-    time.sleep(300)
-    continue
-   games=api("https://v3.football.api-sports.io/fixtures?live=all")
-   if games=="LIMIT":
-    time.sleep(3600)
-    continue
-   if not games:
-    time.sleep(60)
-    continue
-   for g in games:
-    fid=g.get("fixture",{}).get("id")
-    mm=g.get("fixture",{}).get("status",{}).get("elapsed")
-    if mm is None:
-     continue
-    gh=g.get("goals",{}).get("home")
-    ga=g.get("goals",{}).get("away")
-    tm=g.get("teams",{})
-    home=tm.get("home",{}).get("name")
-    away=tm.get("away",{}).get("name")
-    lg=g.get("league",{})
-    label=f"[{lg.get('country','')} - {lg.get('name','')}]"
-    if fid not in av_sfiga_score:
-     av_sfiga_score[fid]=(gh,ga)
-    else:
-     oh,oa=av_sfiga_score[fid]
-     if gh!=oh or ga!=oa:
-      chi="HOME" if gh>oh else "AWAY"
-      av_sfiga_score[fid]=(gh,ga)
-      sf=get_sfigata(fid)
-      if sf:
-       tipo,qs,tf,qf=sf
-       if chi==tipo:
-        sg=gh if tipo=="HOME" else ga
-        fg=ga if tipo=="HOME" else gh
-        if sg>=fg:
-         stato="PAREGGIA" if sg==fg else "VANTAGGIO"
-         ns=home if tipo=="HOME" else away
-         nf=away if tipo=="HOME" else home
-         tg(f"⚫ SFIGATA {stato} {mm}' {label} {home} {gh}-{ga} {away}\nSfigata {ns} @{qs}\nFavorita {nf} @{qf}")
-    if 30<=mm<=45 and fid not in av_s_first:
-     u="https://v3.football.api-sports.io/fixtures/statistics?fixture="+str(fid)
-     st=api(u)
-     sot=0
-     cor=0
-     if st and len(st)>=2:
-      for s in st:
-       for x in s.get("statistics",[]):
-        t=x.get("type","")
-        if "Shots on Goal" in t:
-         try:
-          sot+=int(str(x.get("value") or 0))
-         except:
-          pass
-        if "corner" in t.lower():
-         try:
-          cor+=int(str(x.get("value") or 0))
-         except:
-          pass
-     if sot>=4 or cor>=6:
-      tg(f"🔥 PREPARATI {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}")
-      av_s_first.add(fid)
-    if 65<=mm<=90 and fid not in av_s:
-     u="https://v3.football.api-sports.io/fixtures/statistics?fixture="+str(fid)
-     st=api(u)
-     sot=0
-     cor=0
-     if st and len(st)>=2:
-      for s in st:
-       for x in s.get("statistics",[]):
-        t=x.get("type","")
-        if "Shots on Goal" in t:
-         try:
-          sot+=int(str(x.get("value") or 0))
-         except:
-          pass
-        if "corner" in t.lower():
-         try:
-          cor+=int(str(x.get("value") or 0))
-         except:
-          pass
-     if sot>=4 or cor>=6:
-      tg(f"🚀 GIOCALO {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}")
-      av_s.add(fid)
-      av_g[fid]=gh+ga
-   for g in games:
-    fid=g.get("fixture",{}).get("id")
-    if fid in av_g:
-     gh2=g.get("goals",{}).get("home")
-     ga2=g.get("goals",{}).get("away")
-     if gh2+ga2>av_g[fid]:
-      lg=g.get("league",{})
-      label=f"[{lg.get('country','')} - {lg.get('name','')}]"
-      tm=g.get("teams",{})
-      hn=tm.get("home",{}).get("name")
-      an=tm.get("away",{}).get("name")
-      tg(f"🟢 GOAL VINTO! {label} {hn} {gh2}-{ga2} {an}")
-      del av_g[fid]
-   time.sleep(60)
-  except Exception as e:
-   print(e)
-   time.sleep(15)
-threading.Thread(target=poll,daemon=True).start()
-threading.Thread(target=live_loop,daemon=True).start()
-if __name__=="__main__":
- app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
+     if "angolo
