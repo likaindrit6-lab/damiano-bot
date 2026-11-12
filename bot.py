@@ -18,6 +18,7 @@ def get_today_games():
     url = "https://v1.basketball.api-sports.io/games"
     headers = {"x-apisports-key": API_KEY}
     r = requests.get(url, headers=headers, params={"date": today})
+    print(f"Status games: {r.status_code}")
     return r.json().get("response", [])
 
 def get_odds(game_id):
@@ -28,6 +29,8 @@ def get_odds(game_id):
 
 already_sent_today = None
 
+print("Bot basket partito - aspetta le 8:00")
+
 while True:
     now_italy = datetime.now(TZ_ITALY)
     today_str = now_italy.strftime("%Y-%m-%d")
@@ -35,7 +38,7 @@ while True:
     if now_italy.hour == 8 and now_italy.minute == 0 and already_sent_today != today_str:
         try:
             games = get_today_games()
-            report = f"BASKET OGGI {today_str} - Handicap 12+\n\n"
+            report = f"BASKET OGGI {today_str} - Handicap 12+\nTotale partite: {len(games)}\n\n"
             found = 0
 
             for g in games:
@@ -47,14 +50,18 @@ while True:
                                 for val in bet.get("values", []):
                                     try:
                                         raw = val.get("value", "")
-                                        num = float(raw.split()[-1].replace("+","").replace("-",""))
-                                        if num >= 12:
-                                            home = g["teams"]["home"]["name"]
-                                            away = g["teams"]["away"]["name"]
-                                            ora = datetime.fromisoformat(g["date"].replace("Z","+00:00")).astimezone(TZ_ITALY).strftime("%H:%M")
-                                            report += f"{ora} - {home} vs {away} -> {val['value']} quota {val.get('odd','-')}\n"
-                                            found += 1
-                                            break
+                                        # prende l'ultimo numero tipo +12.5
+                                        import re
+                                        m = re.search(r'([+-]?\d+\.?\d*)', raw)
+                                        if m:
+                                            num = abs(float(m.group(1)))
+                                            if num >= 12:
+                                                home = g["teams"]["home"]["name"]
+                                                away = g["teams"]["away"]["name"]
+                                                ora = datetime.fromisoformat(g["date"].replace("Z","+00:00")).astimezone(TZ_ITALY).strftime("%H:%M")
+                                                report += f"{ora} - {home} vs {away} -> {val['value']} quota {val.get('odd','-')}\n"
+                                                found += 1
+                                                break
                                     except:
                                         continue
 
@@ -63,8 +70,10 @@ while True:
 
             send_telegram(report)
             already_sent_today = today_str
+            print("Report inviato")
+            
         except Exception as e:
-            print(e)
+            print(f"Errore: {e}")
             already_sent_today = today_str
 
     time.sleep(50)
