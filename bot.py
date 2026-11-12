@@ -5,6 +5,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
 import requests
 from flask import Flask
 
@@ -24,26 +25,34 @@ app = Flask(__name__)
 
 @app.route("/")
 def index():
-    return "Bot basket live - OK. Vai su /test per provare"
-
-@app.route("/test")
-def test():
-    send_telegram("✅ Test bot riuscito! Collegamento OK.")
-    return "Test inviato su Telegram!"
+    return "Bot basket live"
 
 def send_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    response = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text}, timeout=30)
+    response = requests.post(
+        url,
+        json={"chat_id": TELEGRAM_CHAT_ID, "text": text},
+        timeout=30,
+    )
     response.raise_for_status()
 
-# ... tutto il resto uguale al tuo ...
 def fetch_games(date_str):
-    response = requests.get(f"{API_BASE}/games", params={"date": date_str}, headers={"x-apisports-key": API_KEY}, timeout=30)
+    response = requests.get(
+        f"{API_BASE}/games",
+        params={"date": date_str},
+        headers={"x-apisports-key": API_KEY},
+        timeout=30,
+    )
     response.raise_for_status()
     return response.json().get("response", [])
 
 def fetch_odds(game_id):
-    response = requests.get(f"{API_BASE}/odds", params={"game": game_id}, headers={"x-apisports-key": API_KEY}, timeout=30)
+    response = requests.get(
+        f"{API_BASE}/odds",
+        params={"game": game_id},
+        headers={"x-apisports-key": API_KEY},
+        timeout=30,
+    )
     response.raise_for_status()
     return response.json().get("response", [])
 
@@ -79,16 +88,22 @@ def run_daily_check():
     today = datetime.now(ROME).strftime("%Y-%m-%d")
     games = fetch_games(today)
     messages = []
+
     for game in games:
         home = game.get("teams", {}).get("home", {}).get("name", "?")
         away = game.get("teams", {}).get("away", {}).get("name", "?")
         game_time = format_game_time(game.get("date", ""))
         outcomes = handicap_12_plus_outcomes(fetch_odds(game["id"]))
         for odd in outcomes.values():
-            messages.append(f"🏀 HANDICAP 12+ - OGGI - {home} vs {away} - Ore {game_time} - Quota: {odd}")
+            messages.append(
+                f"🏀 HANDICAP 12+ - OGGI - {home} vs {away} - Ore {game_time} - "
+                f"Quota: {odd}"
+            )
+
     if not messages:
         send_telegram("Oggi nessuna partita con handicap 12+")
         return
+
     for message in messages:
         send_telegram(message)
 
