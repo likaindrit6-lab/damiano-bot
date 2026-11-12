@@ -1,3 +1,177 @@
+import os,time,requests,threading,json
+from flask import Flask
+from datetime import datetime,timezone,timedelta
+from zoneinfo import ZoneInfo
+BOT=os.getenv("BOT_TOKEN")
+CHAT=os.getenv("CHAT_ID")
+KEY=os.getenv("API_FOOTBALL_KEY")
+ITALY=timezone(timedelta(hours=2))
+ROME=ZoneInfo("Europe/Rome")
+is_paused=False
+last_id=0
+av_g={}
+av_s=set()
+av_s_first=set()
+av_sfiga={}
+av_builder={}
+
+TOP={"Italy":135,"England":39,"Spain":140,"Germany":78,"France":61,"Netherlands":88,"Portugal":94,"Belgium":144,"Turkey":203,"Scotland":179,"Austria":218,"Switzerland":207,"Denmark":106,"Sweden":113,"Norway":103,"Poland":107}
+def is_youth(n):
+ b=n.lower()
+ for x in ["u19","u21","u23","u17","women","youth","reserve"]:
+  if x in b: return True
+ return False
+
+app=Flask(__name__)
+@app.route("/")
+def home():
+ return "BOT V64 TUTTO OK",200
+
+TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI","OVER 3.5 WORLDWIDE"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["STATUS"],["ACCENDI","SPEGNI"]],"resize_keyboard":True})
+
+def tg(m,cid=None,keys=False):
+ try:
+  cid=cid or CHAT
+  if not cid or not BOT: return
+  base="https://api.telegram.org/bot"+BOT
+  pay={"chat_id":cid,"text":m,"parse_mode":"HTML"}
+  if keys: pay["reply_markup"]=json.loads(TAST)
+  requests.post(base+"/sendMessage",json=pay,timeout=20)
+ except Exception as e: print(e)
+
+def api(url):
+ try:
+  r=requests.get(url,headers={"x-apisports-key":KEY},timeout=30)
+  if r.status_code==429: return "LIMIT"
+  return r.json().get("response",[])
+ except Exception: return []
+
+def get_sfigata(fid):
+ try:
+  data=api(f"https://v3.football.api-sports.io/odds?fixture={fid}")
+  if not data or data=="LIMIT": return None
+  for book in data[0].get("bookmakers",[])[:2]:
+   for bet in book.get("bets",[]):
+    if bet.get("name")=="Match Winner":
+     q={}
+     for v in bet.get("values",[]):
+      try: q[v.get("value")]=float(v.get("odd"))
+      except: pass
+     h=q.get("Home",0); a=q.get("Away",0)
+     if h>=4.5 and h>a and a<=1.8: return ("HOME",h,"AWAY",a)
+     if a>=4.5 and a>h and h<=1.8: return ("AWAY",a,"HOME",h)
+ except Exception: return None
+
+def get_last10(team_id,mode):
+ try:
+  data=api(f"https://v3.football.api-sports.io/fixtures?team={team_id}&last=10&status=FT")
+  if not data or data=="LIMIT": return "LIMIT"
+  if len(data)<5: return None
+  c=0
+  for f in data:
+   gh=f.get("goals",{}).get("home") or 0; ga=f.get("goals",{}).get("away") or 0
+   tot=gh+ga
+   if mode=="15" and tot>=2: c+=1
+   if mode=="35" and tot>=4: c+=1
+  return c/len(data)*100
+ except Exception: return None
+
+def get_best(hid,aid,mode,limit):
+ try:
+  s1=get_last10(hid,mode)
+  if s1=="LIMIT": return "LIMIT"
+  time.sleep(0.3)
+  s2=get_last10(aid,mode)
+  if s2=="LIMIT": return "LIMIT"
+  if s1 is None or s2 is None: return None
+  avg=(s1+s2)/2
+  return avg if avg>=limit else None
+ except Exception: return None
+
+def get_corner_avg(team_id):
+ try:
+  data=api(f"https://v3.football.api-sports.io/fixtures?team={team_id}&last=10&status=FT")
+  if data=="LIMIT": return "LIMIT"
+  if not data or len(data)<3: return None
+  tot=0; cnt=0
+  for fx in data[:10]:
+   fid=fx.get("fixture",{}).get("id")
+   st=api(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
+   if st=="LIMIT": return "LIMIT"
+   if not st: continue
+   c=0
+   for ts in st:
+    for x in ts.get("statistics",[]):
+     if "corner" in (x.get("type") or "").lower():
+      try: c+=int(str(x.get("value") or 0))
+      except: pass
+   if c>0: tot+=c; cnt+=1
+   time.sleep(0.2)
+  return tot/cnt if cnt>=3 else None
+ except Exception: return None
+
+def get_deep(team_id):
+ try:
+  data=api(f"https://v3.football.api-sports.io/fixtures?team={team_id}&last=10&status=FT")
+  if not data or data=="LIMIT" or len(data)<4: return None
+  o15=0; gol=0; ang=0; gial=0; tiri=0; cnt=0
+  for fx in data[:8]:
+   fid=fx.get("fixture",{}).get("id")
+   gh=fx.get("goals",{}).get("home") or 0; ga=fx.get("goals",{}).get("away") or 0
+   is_home=fx.get("teams",{}).get("home",{}).get("id")==team_id
+   gf=gh if is_home else ga
+   if gh+ga>=2: o15+=1
+   gol+=gf
+   st=api(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
+   if st=="LIMIT": time.sleep(1); continue
+   if not st: continue
+   for ts in st:
+    if ts.get("team",{}).get("id")!=team_id: continue
+    for x in ts.get("statistics",[]):
+     tp=(x.get("type") or "").lower(); v=x.get("value")
+     if v is None: continue
+     try: vi=int(str(v))
+     except: continue
+     if "corner" in tp: ang+=vi
+     if "yellow" in tp: gial+=vi
+     if "shots on goal" in tp: tiri+=vi
+   cnt+=1; time.sleep(0.2)
+  if cnt==0: return None
+  return {"o15":o15/cnt*100,"gol":gol/cnt,"ang":ang/max(1,cnt),"gial":gial/max(1,cnt),"tiri":tiri/max(1,cnt)}
+ except Exception: return None
+
+def run_over90(cid=None):
+ try:
+  tg("OVER 1.5 90% NAZIONI - Analizzo...",cid,True)
+  today=datetime.now(ROME).strftime("%Y-%m-%d")
+  data=api(f"https://v3.football.api-sports.io/fixtures?date={today}") or []
+  now_dt=datetime.now(ROME); sel=[]; chk=0
+  for fx in data:
+   lg=fx.get("league",{}); co=lg.get("country")
+   if co not in TOP: continue
+   if lg.get("id")!=TOP.get(co): continue
+   if is_youth(lg.get("name","")): continue
+   if fx.get("fixture",{}).get("status",{}).get("short")!="NS": continue
+   try:
+    fd=fx.get("fixture",{}).get("date","").replace("Z","+00:00"); fdt=datetime.fromisoformat(fd).astimezone(ROME)
+   except: continue
+   if fdt<now_dt: continue
+   chk+=1
+   if chk>30: break
+   tm=fx.get("teams",{}); hid=tm.get("home",{}).get("id"); aid=tm.get("away",{}).get("id")
+   perc=get_best(hid,aid,"15",90)
+   if perc=="LIMIT": time.sleep(60); perc=get_best(hid,aid,"15",90)
+   if not perc: continue
+   ora=fdt.strftime("%H:%M"); hn=tm.get("home",{}).get("name"); an=tm.get("away",{}).get("name")
+   sel.append(f"{ora} [{co}] {hn} vs {an} -> {perc:.0f}%")
+   if len(sel)>=20: break
+  if sel:
+   out=f"OVER 1.5 90% - {len(sel)}\n\n"
+   for i,m in enumerate(sel,1): out+=f"{i}. {m}\n"
+   tg(out,cid,True)
+  else: tg(f"0 partite 90% su {chk}",cid,True)
+ except Exception as e: tg(f"Errore Over90: {e}",cid,True)
+
 def run_over35(cid=None):
  try:
   tg("OVER 3.5 WORLDWIDE - Analizzo...",cid,True)
@@ -82,50 +256,6 @@ def run_builder(cid=None):
   else: tg(f"0 builder per OGGI {today}",cid,True)
  except Exception as e: tg(f"Errore Builder: {e}",cid,True)
 
-def run_basket(cid=None):
- try:
-  tg("BASKET HANDICAP 12+ - Analizzo...",cid,True)
-  today=datetime.now(ROME).strftime("%Y-%m-%d")
-  games=apiB("games",{"date":today}) or []
-  if games=="LIMIT": time.sleep(60); games=apiB("games",{"date":today}) or []
-  sel=[]
-  import re
-  for g in games:
-   if not isinstance(g,dict): continue
-   gid=g.get("id")
-   if not gid: continue
-   st=g.get("status",{}).get("short","")
-   if st not in ["NS",""]: continue
-   odds=apiB("odds",{"game":gid}) or []
-   if odds=="LIMIT": time.sleep(30); odds=apiB("odds",{"game":gid}) or []
-   for item in odds:
-    for book in item.get("bookmakers",[])[:2]:
-     for bet in book.get("bets",[]):
-      if "handicap" not in (bet.get("name") or "").lower(): continue
-      for v in bet.get("values",[]):
-       lab=v.get("value") or ""
-       nums=re.findall(r"[-+]?\d+(?:\.\d+)?",lab)
-       if not nums: continue
-       try: line=float(nums[-1])
-       except: continue
-       if abs(line) < HMIN: continue
-       try: q=float(v.get("odd"))
-       except: continue
-       home=g.get("teams",{}).get("home",{}).get("name","?"); away=g.get("teams",{}).get("away",{}).get("name","?")
-       try:
-        dt=g.get("date","").replace("Z","+00:00"); fdt=datetime.fromisoformat(dt).astimezone(ROME); ora=fdt.strftime("%H:%M")
-       except: ora="oggi"
-       sel.append(f"{ora} {home} vs {away}\n{lab} @ {q} (H {line})")
-       if len(sel)>=15: break
-    if len(sel)>=15: break
-   if len(sel)>=15: break
-  if sel:
-   out=f"BASKET HANDICAP {HMIN}+ - {len(sel)}\n\n"
-   for i,m in enumerate(sel,1): out+=f"{i}. {m}\n\n"
-   tg(out,cid,True)
-  else: tg(f"0 handicap {HMIN}+ oggi",cid,True)
- except Exception as e: tg(f"Errore Basket: {e}",cid,True)
-
 def poll():
  global is_paused,last_id
  try:
@@ -142,17 +272,16 @@ def poll():
      last_id=u["update_id"]; msg=u.get("message",{}); txt=(msg.get("text") or "").strip(); low=txt.lower(); cid=msg.get("chat",{}).get("id")
      if not txt: continue
      if "spegni" in low: is_paused=True; tg("PAUSA",cid,True); continue
-     if "accendi" in low or "/start" in low: is_paused=False; tg("V66 ATTIVO - CALCIO+BASKET",cid,True); continue
-     if "status" in low: tg(f"V66 CALCIO+BASKET - BUILDER {len(av_builder)} LIVE {len(av_g)}",cid,True); continue
+     if "accendi" in low or "/start" in low: is_paused=False; tg("V64 TUTTO RIPRISTINATO OK",cid,True); continue
+     if "status" in low: tg(f"V64 TUTTO RIPRISTINATO OK - BUILDER {len(av_builder)}",cid,True); continue
      if "over 1.5" in low and "90" in low: run_over90(cid); continue
      if "over 3.5" in low: run_over35(cid); continue
      if "builder" in low: run_builder(cid); continue
-     if "basket" in low or "handicap" in low: run_basket(cid); continue
   except: pass
   time.sleep(2)
 
 def live_loop():
- tg("BOT V66 LIVE - V64 RIPRISTINATO + BASKET H12",None,True)
+ tg("BOT V64 LIVE - TUTTO RIPRISTINATO + COLORI",None,True)
  while True:
   try:
    if is_paused: time.sleep(30); continue
@@ -260,20 +389,8 @@ def builder_tracker():
     del av_builder[fid]; time.sleep(2)
   except Exception as e: print(f"tracker err {e}"); time.sleep(30)
 
-def scheduler_loop():
- while True:
-  try:
-   now=datetime.now(ROME)
-   if now.hour==8 and now.minute==0:
-    if not is_paused:
-     run_over90(); time.sleep(3); run_over35(); time.sleep(3); run_builder(); time.sleep(3); run_basket()
-    time.sleep(70)
-  except: pass
-  time.sleep(20)
-
 threading.Thread(target=poll,daemon=True).start()
 threading.Thread(target=live_loop,daemon=True).start()
 threading.Thread(target=builder_tracker,daemon=True).start()
-threading.Thread(target=scheduler_loop,daemon=True).start()
 if __name__=="__main__":
  app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
