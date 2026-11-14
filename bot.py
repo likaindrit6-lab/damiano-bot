@@ -1,4 +1,4 @@
-import os,time,requests,threading,json
+import os,time,requests,threading,json,fcntl
 from flask import Flask
 from datetime import datetime,timezone,timedelta
 from zoneinfo import ZoneInfo
@@ -14,6 +14,7 @@ av_s=set()
 av_s_first=set()
 av_sfiga_score={}
 av_sfiga_sent=set()
+seen=set()
 TOP={
 "Italy":135,"England":39,"Spain":140,"Germany":78,
 "France":61,"Netherlands":88,"Portugal":94,"Belgium":144,
@@ -35,7 +36,7 @@ app=Flask(__name__)
 @app.route("/")
 def home():
  return "BOT V54 FULL + OVER 1.5 90% + BUILDER WORLDWIDE",200
-TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 85%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
+TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 65%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
 TAST_C=json.dumps({"keyboard":[["APRI MENU"]],"resize_keyboard":True})
 def tg(m,cid=None,keys=False,chiusa=False):
  try:
@@ -361,14 +362,14 @@ def get_gialli_avg_team(team_id):
      if yc>=1:
       tot+=1
    time.sleep(0.25)
-  if cnt<5:
+  if cnt<3:
    return None
   return tot/cnt*100
  except:
   return None
 def run_gialli(cid=None):
  try:
-  tg("GIALLI 85% - Analizzo...",cid,True)
+  tg("GIALLI 65% - Analizzo...",cid,True)
   today=datetime.now(ROME).strftime("%Y-%m-%d")
   data=api(f"https://v3.football.api-sports.io/fixtures?date={today}") or []
   if data=="LIMIT":
@@ -412,7 +413,7 @@ def run_gialli(cid=None):
    if not isinstance(g2,float):
     continue
    avg=(g1+g2)/2
-   if avg>=75:
+   if avg>=65:
     ora=fdt.strftime("%H:%M")
     hn=tm.get("home",{}).get("name")
     an=tm.get("away",{}).get("name")
@@ -421,12 +422,12 @@ def run_gialli(cid=None):
     if len(sel)>=15:
      break
   if sel:
-   out=f"GIALLI 85% - {len(sel)} partite\n\n"
+   out=f"GIALLI 65% - {len(sel)} partite\n\n"
    for i,m in enumerate(sel,1):
     out+=f"{i}. {m}\n"
    tg(out,cid,True)
   else:
-   tg(f"0 partite gialli 85% oggi. Controllate {chk}",cid,True)
+   tg(f"0 partite gialli 65% oggi. Controllate {chk}",cid,True)
  except Exception as e:
   tg(f"Errore Gialli: {e}",cid,True)
 
@@ -530,6 +531,14 @@ def run_bad_builder(cid=None):
  except Exception as e:
   tg(f"Errore Builder: {e}",cid,True)
 
+def acquire_single_instance():
+ f=open("/tmp/bot_v54.lock","w")
+ try:
+  fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)
+  return f
+ except OSError:
+  f.close()
+  return None
 def poll():
  global is_paused,last_id
  try:
@@ -548,6 +557,9 @@ def poll():
    if r.get("ok"):
     for u in r.get("result",[]):
      last_id=u["update_id"]
+     if last_id in seen:
+      continue
+     seen.add(last_id)
      msg=u.get("message",{})
      txt=(msg.get("text") or "").strip()
      low=txt.lower()
@@ -705,7 +717,9 @@ def live_loop():
   except Exception as e:
    print(e)
    time.sleep(15)
-threading.Thread(target=poll,daemon=True).start()
-threading.Thread(target=live_loop,daemon=True).start()
+_LOCK=acquire_single_instance()
+if _LOCK:
+ threading.Thread(target=poll,daemon=True).start()
+ threading.Thread(target=live_loop,daemon=True).start()
 if __name__=="__main__":
- app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
+ app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)),use_reloader=False)
