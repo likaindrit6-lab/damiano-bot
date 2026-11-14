@@ -369,19 +369,15 @@ def get_gialli_avg_team(team_id):
   return None
 def run_gialli(cid=None):
  try:
-  tg("GIALLI 65% - Analizzo...",cid,True)
+  tg("GIALLI 65% WORLDWIDE - Analizzo...",cid,True)
   today=datetime.now(ROME).strftime("%Y-%m-%d")
   data=api(f"https://v3.football.api-sports.io/fixtures?date={today}") or []
   if data=="LIMIT":
    data=[]
   now_dt=datetime.now(ROME)
-  sel=[]
-  chk=0
+  eligible=[]
   for fx in data:
    lg=fx.get("league",{})
-   co=lg.get("country")
-   if co not in TOP:
-    continue
    if is_youth(lg.get("name","")):
     continue
    if fx.get("fixture",{}).get("status",{}).get("short")!="NS":
@@ -393,9 +389,13 @@ def run_gialli(cid=None):
     continue
    if fdt<now_dt:
     continue
+   eligible.append((fdt,fx))
+  sel=[]
+  chk=0
+  for fdt,fx in eligible[:40]:
+   lg=fx.get("league",{})
+   co=lg.get("country")
    chk+=1
-   if chk>10:
-    break
    tm=fx.get("teams",{})
    hid=tm.get("home",{}).get("id")
    aid=tm.get("away",{}).get("id")
@@ -427,7 +427,7 @@ def run_gialli(cid=None):
     out+=f"{i}. {m}\n"
    tg(out,cid,True)
   else:
-   tg(f"0 partite gialli 65% oggi. Controllate {chk}",cid,True)
+   tg(f"0 partite gialli 65% oggi. Controllate {chk} su {len(eligible)} nel mondo",cid,True)
  except Exception as e:
   tg(f"Errore Gialli: {e}",cid,True)
 
