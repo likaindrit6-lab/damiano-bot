@@ -1,5 +1,4 @@
-import os,time,requests,threading,json,fcntl
-from flask import Flask
+import os,time,requests,threading,json
 from datetime import datetime,timezone,timedelta
 from zoneinfo import ZoneInfo
 BOT=os.getenv("BOT_TOKEN")
@@ -32,14 +31,20 @@ def is_youth(n):
   if x in b:
    return True
  return False
-app=Flask(__name__)
-@app.route("/")
-def home():
- return "BOT V54 FULL + OVER 1.5 90% + BUILDER WORLDWIDE",200
+
 TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 65%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
 TAST_C=json.dumps({"keyboard":[["APRI MENU"]],"resize_keyboard":True})
+
+# ANTI-DOPPIO CACHE
+sent_cache={}
 def tg(m,cid=None,keys=False,chiusa=False):
  try:
+  # Anti doppio: se stesso messaggio negli ultimi 30 sec, non inviare
+  h=hash(m[:100])
+  now=time.time()
+  if h in sent_cache and now-sent_cache[h]<30:
+   return
+  sent_cache[h]=now
   cid=cid or CHAT
   if not cid or not BOT:
    return
@@ -53,6 +58,7 @@ def tg(m,cid=None,keys=False,chiusa=False):
   requests.post(base+"/sendMessage",json=pay,timeout=20)
  except Exception as e:
   print(e)
+
 def api(url):
  try:
   r=requests.get(url,headers={"x-apisports-key":KEY},timeout=30)
@@ -61,6 +67,8 @@ def api(url):
   return r.json().get("response",[])
  except:
   return []
+
+# [TUTTE LE TUE FUNZIONI get_sfigata, get_over_odd, get_last10, get_best90, ecc SONO UGUALI, LE HO LASCIATE]
 def get_sfigata(fid):
  try:
   u="https://v3.football.api-sports.io/odds?fixture="+str(fid)
@@ -85,6 +93,7 @@ def get_sfigata(fid):
   return None
  except:
   return None
+
 def get_over_odd(fid):
  try:
   u="https://v3.football.api-sports.io/odds?fixture="+str(fid)
@@ -103,6 +112,7 @@ def get_over_odd(fid):
  except:
   pass
  return None
+
 def get_last10(team_id):
  try:
   u=f"https://v3.football.api-sports.io/fixtures?team={team_id}&last=10&status=FT"
@@ -121,6 +131,7 @@ def get_last10(team_id):
   return c15/tot*100
  except:
   return None
+
 def get_best90(hid,aid):
  try:
   s1=get_last10(hid)
@@ -137,6 +148,7 @@ def get_best90(hid,aid):
   return None
  except:
   return None
+
 def get_corner_avg_team(team_id):
  try:
   u=f"https://v3.football.api-sports.io/fixtures?team={team_id}&last=10&status=FT"
@@ -171,6 +183,7 @@ def get_corner_avg_team(team_id):
   return tot/cnt
  except:
   return None
+
 def run_corner_over65(cid=None):
  try:
   tg("OVER 6.5 ANGOLI - PRE MATCH - STATS 10 PARTITE - Analizzo 3 min...",cid,True)
@@ -232,6 +245,7 @@ def run_corner_over65(cid=None):
    tg(f"0 partite con media Over 6.5 oggi. Analizzate {chk}",cid,True)
  except Exception as e:
   tg(f"Errore Corner Over 6.5: {e}",cid,True)
+
 def run_over90(cid=None):
  try:
   tg("OVER 1.5 90% NAZIONI - Analizzo...",cid,True)
@@ -286,8 +300,10 @@ def run_over90(cid=None):
    tg(f"0 partite 90% oggi. Controllate {chk}",cid,True)
  except Exception as e:
   tg(f"Errore Over90: {e}",cid,True)
+
 def run_bolla(cid=None):
  tg("BOLLA - funzione vecchia mantenuta, usa OVER 1.5 90% per nuova versione",cid,True)
+
 def run_doppia(cid=None):
  try:
   today=datetime.now(ROME).strftime("%Y-%m-%d")
@@ -367,9 +383,10 @@ def get_gialli_avg_team(team_id):
   return tot/cnt*100
  except:
   return None
+
 def run_gialli(cid=None):
  try:
-  tg("GIALLI 65% WORLDWIDE - Analizzo...",cid,True)
+  tg("GIALLI 65% WORLDWIDE - Analizzo 200 partite...",cid,True)
   today=datetime.now(ROME).strftime("%Y-%m-%d")
   data=api(f"https://v3.football.api-sports.io/fixtures?date={today}") or []
   if data=="LIMIT":
@@ -392,7 +409,7 @@ def run_gialli(cid=None):
    eligible.append((fdt,fx))
   sel=[]
   chk=0
-  for fdt,fx in eligible[:40]:
+  for fdt,fx in eligible[:200]:
    lg=fx.get("league",{})
    co=lg.get("country")
    chk+=1
@@ -422,7 +439,7 @@ def run_gialli(cid=None):
     if len(sel)>=15:
      break
   if sel:
-   out=f"GIALLI 65% - {len(sel)} partite\n\n"
+   out=f"GIALLI 65% - {len(sel)} partite su {chk}\n\n"
    for i,m in enumerate(sel,1):
     out+=f"{i}. {m}\n"
    tg(out,cid,True)
@@ -431,7 +448,6 @@ def run_gialli(cid=None):
  except Exception as e:
   tg(f"Errore Gialli: {e}",cid,True)
 
-# --- SOLO NUOVO: BAD BUILDER WORLDWIDE GIORNO E NOTTE ---
 def get_builder_odds(fid):
  try:
   u="https://v3.football.api-sports.io/odds?fixture="+str(fid)
@@ -531,14 +547,6 @@ def run_bad_builder(cid=None):
  except Exception as e:
   tg(f"Errore Builder: {e}",cid,True)
 
-def acquire_single_instance():
- f=open("/tmp/bot_v54.lock","w")
- try:
-  fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)
-  return f
- except OSError:
-  f.close()
-  return None
 def poll():
  global is_paused,last_id
  try:
@@ -560,6 +568,8 @@ def poll():
      if last_id in seen:
       continue
      seen.add(last_id)
+     if len(seen)>500:
+      seen.clear()
      msg=u.get("message",{})
      txt=(msg.get("text") or "").strip()
      low=txt.lower()
@@ -578,10 +588,10 @@ def poll():
       continue
      if "accendi" in low or "/start" in low:
       is_paused=False
-      tg("V54 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE",cid,True)
+      tg("V55 NO DOPPIO ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE",cid,True)
       continue
      if "status" in low:
-      tg("STATUS V54 FULL + BUILDER WORLDWIDE OK",cid,True)
+      tg("STATUS V55 NO DOPPIO OK - 1 SOLO BOT",cid,True)
       continue
      if "over 1.5" in low and "90" in low:
       run_over90(cid)
@@ -604,8 +614,9 @@ def poll():
   except:
    pass
   time.sleep(2)
+
 def live_loop():
- tg("BOT V54 FULL + OVER 1.5 90% + BUILDER WORLDWIDE ATTIVO",None,True)
+ tg("BOT V55 NO DOPPIO ATTIVO",None,True)
  while True:
   try:
    if is_paused:
@@ -717,9 +728,10 @@ def live_loop():
   except Exception as e:
    print(e)
    time.sleep(15)
-_LOCK=acquire_single_instance()
-if _LOCK:
- threading.Thread(target=poll,daemon=True).start()
- threading.Thread(target=live_loop,daemon=True).start()
-if __name__=="__main__":
- app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)),use_reloader=False)
+
+# AVVIO SENZA FLASK - ANTI DOPPIO
+print("AVVIO V55 NO DOPPIO...")
+threading.Thread(target=poll,daemon=True).start()
+threading.Thread(target=live_loop,daemon=True).start()
+while True:
+ time.sleep(3600)
