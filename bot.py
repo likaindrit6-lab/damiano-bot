@@ -78,7 +78,7 @@ def do_search_gialli(cid):
             avg_tot=avg_h+avg_a
             if avg_tot>=3.0:
                 hour=f.get("fixture",{}).get("date","")[11:16]
-                trov.append(f"{hour} {home}-{away} gialli {avg_tot:.1f} {league}")
+                trov.append(f"{hour} {home}-{away} {country} {league} gialli {avg_tot:.1f}")
             time.sleep(0.4)
         tg("🟨 GIALLI 65% OGGI:\n"+"\n".join(trov[:15]) if trov else "🟨 GIALLI: nessuna oggi",cid,True)
     except Exception as e: tg(f"GIALLI err {e}",cid,True)
@@ -92,14 +92,15 @@ def do_search_angoli(cid):
             home=f.get("teams",{}).get("home",{}).get("name","")
             away=f.get("teams",{}).get("away",{}).get("name","")
             league=f.get("league",{}).get("name","")
+            country=f.get("league",{}).get("country","")
             hour=f.get("fixture",{}).get("date","")[11:16]
-            trov.append(f"{hour} {home}-{away} {league}")
+            trov.append(f"{hour} {home}-{away} {country} {league}")
         tg("🚩 ANGOLI +6 OGGI:\n"+"\n".join(trov[:12]) if trov else "🚩 ANGOLI: 0",cid,True)
     except Exception as e: tg(f"ANGOLI err {e}",cid,True)
 def live_loop():
     global last_scores
-    print("AVVIO V59.1 EMOJI")
-    tg("🤖 BOT V59.1 ATTIVA CON EMOJI\n🟨 GIALLI + 🚩 ANGOLI PRE-MATCH\n🔥 TIRI 4/7 LIVE + 🚀 BOMBA\n⚫ SFIGATA 4.50+ GOAL+HT",force=True)
+    print("AVVIO V59.2 NAZIONE")
+    tg("🤖 BOT V59.2 ATTIVA\n⚫ SFIGATA 4.50+ CON NAZIONE",force=True)
     while True:
         try:
             if is_paused:
@@ -117,6 +118,7 @@ def live_loop():
                     gh=f.get("goals",{}).get("home",0) or 0
                     ga=f.get("goals",{}).get("away",0) or 0
                     league=f.get("league",{}).get("name","")
+                    country=f.get("league",{}).get("country","")
                     stats=api("/fixtures/statistics", {"fixture":fid})
                     sot=0; cor=0
                     for tm in stats:
@@ -130,11 +132,11 @@ def live_loop():
                             except: pass
                     if 30 <= minute <= 45 and fid not in sent_preparati:
                         if sot>=4 or cor>=6:
-                            tg(f"🔥 PREPARATI {minute}' {home}-{away} {gh}-{ga} Tiri {sot} Angoli {cor} {league}")
+                            tg(f"🔥 PREPARATI {minute}' {home}-{away} {gh}-{ga} Tiri {sot} Angoli {cor}\n{country} - {league}")
                             sent_preparati.add(fid)
                     if 60 <= minute <= 85 and fid not in sent_bomba:
                         if sot>=7:
-                            tg(f"🚀 BOMBA 7 TIRI {minute}' {home}-{away} {gh}-{ga} Tiri {sot} {league}")
+                            tg(f"🚀 BOMBA 7 TIRI {minute}' {home}-{away} {gh}-{ga} Tiri {sot}\n{country} - {league}")
                             sent_bomba.add(fid)
                     ho,ao=get_odds(fid)
                     if ho>=4.5 or ao>=4.5:
@@ -145,10 +147,10 @@ def live_loop():
                             prev=last_scores.get(fid,(0,0))
                             scored=(is_home and gh>prev[0]) or (not is_home and ga>prev[1])
                             if scored and fid not in sent_sfigata_goal:
-                                tg(f"⚫ SFIGATA GOAL! {minute}'\n{sfig_team} QUOTA {quota}\n{home}-{away} {gh}-{ga}\n{league}")
+                                tg(f"⚫ SFIGATA GOAL! {minute}'\n{sfig_team} QUOTA {quota}\n{home}-{away} {gh}-{ga}\n{country} - {league}")
                                 sent_sfigata_goal.add(fid)
                             if 44 <= minute <= 52 and gh==ga and fid not in sent_sfigata_ht:
-                                tg(f"⚫ SFIGATA HT PARI! {minute}'\n{sfig_team} QUOTA {quota} STA PAREGGIANDO\n{home}-{away} {gh}-{ga}\n{league}")
+                                tg(f"⚫ SFIGATA HT PARI! {minute}'\n{sfig_team} QUOTA {quota} STA PAREGGIANDO\n{home}-{away} {gh}-{ga}\n{country} - {league}")
                                 sent_sfigata_ht.add(fid)
                     last_scores[fid]=(gh,ga)
                     time.sleep(0.5)
@@ -160,7 +162,6 @@ def live_loop():
 def poll_loop():
     global is_paused
     last_id=0
-    print("POLL V59.1")
     while True:
         try:
             if not BOT_TOKEN:
@@ -174,10 +175,9 @@ def poll_loop():
                 txt=msg.get("text","") or ""
                 cid=msg.get("chat",{}).get("id",0)
                 low=txt.lower()
-                print(f"CMD {txt}")
                 if "accendi" in low or "/start" in low:
                     is_paused=False
-                    tg("✅ BOT ACCESO V59.1 CON EMOJI",cid,True)
+                    tg("✅ BOT ACCESO V59.2",cid,True)
                     continue
                 if "spegni" in low or "pausa" in low:
                     is_paused=True
@@ -185,11 +185,11 @@ def poll_loop():
                     continue
                 if "status" in low:
                     lives=get_live()
-                    tg(f"📊 V59.1 STATUS\nLive {len(lives)}\n🔥 Preparati {len(sent_preparati)} 🚀 Bomba {len(sent_bomba)}\n⚫ Sfigata Goal {len(sent_sfigata_goal)} HT {len(sent_sfigata_ht)}\nPausa {is_paused}",cid,True)
+                    tg(f"📊 V59.2 STATUS\nLive {len(lives)}\n🔥 {len(sent_preparati)} 🚀 {len(sent_bomba)}\n⚫ Goal {len(sent_sfigata_goal)} HT {len(sent_sfigata_ht)}",cid,True)
                     continue
                 if "reset" in low:
                     sent_preparati.clear(); sent_bomba.clear(); sent_sfigata_goal.clear(); sent_sfigata_ht.clear(); last_scores.clear()
-                    tg("🔄 RESET OK TUTTO",cid,True)
+                    tg("🔄 RESET OK",cid,True)
                     continue
                 if "gialli" in low:
                     threading.Thread(target=do_search_gialli,args=(cid,),daemon=True).start()
@@ -198,7 +198,7 @@ def poll_loop():
                     threading.Thread(target=do_search_angoli,args=(cid,),daemon=True).start()
                     continue
                 if "builder" in low or "doppia" in low or "bolla" in low or "over" in low:
-                    tg(f"🟢 TASTO {txt} OK - BOT AUTO ATTIVO V59.1",cid,True)
+                    tg(f"🟢 TASTO {txt} OK",cid,True)
                     continue
         except Exception as e:
             print(f"poll err {e}")
