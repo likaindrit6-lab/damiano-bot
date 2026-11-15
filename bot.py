@@ -3,7 +3,9 @@ from datetime import datetime, timedelta
 import requests
 
 BOT_TOKEN=os.getenv("BOT_TOKEN","")
-CHAT_ID=int(os.getenv("CHAT_ID","0") or 0)
+CHAT_RAW=os.getenv("CHAT_ID","0") or "0"
+CHAT_IDS=[int(x.strip()) for x in CHAT_RAW.replace(";",",").split(",") if x.strip().lstrip("-").isdigit()]
+CHAT_ID=CHAT_IDS[0] if CHAT_IDS else 0
 API_KEY=os.getenv("API_FOOTBALL_KEY","")
 BASE_URL="https://v3.football.api-sports.io"
 LEAGUE_LIVE_DELAY=50
@@ -15,21 +17,26 @@ is_paused=False
 sent_sfigata=set()
 sent_preparati=set()
 sent_bomba=set()
-sent_gol=set()
-sent_15=set()
-sent_gialli=set()
-sent_angoli=set()
 
 def tg(msg,cid=None,force=False):
     global is_paused
     if is_paused and not force:
         return
     try:
-        target=cid or CHAT_ID
-        if not BOT_TOKEN or not target:
+        targets=[]
+        if cid:
+            targets=[cid]
+        else:
+            targets=CHAT_IDS if CHAT_IDS else [CHAT_ID]
+        if not BOT_TOKEN:
             return
         url=f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(url,json={"chat_id":target,"text":msg,"parse_mode":"Markdown"},timeout=10)
+        for target in targets:
+            try:
+                requests.post(url,json={"chat_id":target,"text":msg,"parse_mode":"Markdown"},timeout=10)
+                time.sleep(0.3)
+            except:
+                pass
     except:
         pass
 
@@ -49,44 +56,17 @@ def api(path,params=None):
 def get_live():
     return api("/fixtures", {"live":"all"})
 
-def get_stats(fid):
-    return api("/fixtures/statistics", {"fixture":fid})
-
-def parse_sot(stats):
-    try:
-        for team in stats:
-            for s in team.get("statistics",[]):
-                if "on target" in s.get("type","").lower() or "shots on goal" in s.get("type","").lower():
-                    v=s.get("value")
-                    if v is not None:
-                        return int(v)
-    except:
-        pass
-    return 0
-
-def parse_corners(stats):
-    try:
-        for team in stats:
-            for s in team.get("statistics",[]):
-                if "corner" in s.get("type","").lower():
-                    v=s.get("value")
-                    if v is not None:
-                        return int(v)
-    except:
-        pass
-    return 0
-
 def live_loop():
     global is_paused
-    print("AVVIO V57.1 FINALE FIXED - SFIGATA + PREPARATI + BOMBA 7 TIRI")
-    tg("🤖 BOT V57.1 ATTIVO\nSFIGATA + PREPARATI 30-45 + BOMBA 7 TIRI 60-85\nScrivi STATUS per controllo",force=True)
+    print("AVVIO V57.2 FIX DOPPIA CHAT - TUTTO ATTIVO")
+    tg("🤖 BOT V57.2 ATTIVO\nFIX 2 CHAT OK\nSFIGATA + PREPARATI + BOMBA 7 TIRI",force=True)
     while True:
         try:
             if is_paused:
                 time.sleep(5)
                 continue
             lives=get_live()
-            print(f"LIVE trovate: {len(lives)} - {datetime.now()}")
+            print(f"LIVE: {len(lives)} - {datetime.now()}")
             for f in lives:
                 try:
                     fid=f.get("fixture",{}).get("id")
@@ -101,7 +81,6 @@ def live_loop():
                     league=f.get("league",{}).get("name","")
                     key=f"{home}-{away}"
 
-                    # --- PREPARATI 30-45 con 4 tiri ---
                     if 30 <= minute <= 45 and key not in sent_preparati:
                         st=api("/fixtures/statistics", {"fixture":fid})
                         sot=0
@@ -117,11 +96,10 @@ def live_loop():
                                 if "corner" in t:
                                     cor+=int(v)
                         if sot>=4 or cor>=6:
-                            msg=f"⚠️ PREPARATI {minute}'\n{home} - {away}\n{gh}-{ga}\nTiri: {sot} | Angoli: {cor}\n{league}"
+                            msg=f"⚠️ PREPARATI {minute}'\n{home} - {away}\n{gh}-{ga}\nTiri:{sot} Angoli:{cor}\n{league}"
                             tg(msg)
                             sent_preparati.add(key)
 
-                    # --- BOMBA 7 TIRI 60-85 qualsiasi risultato ---
                     if 60 <= minute <= 85 and key not in sent_bomba:
                         st=api("/fixtures/statistics", {"fixture":fid})
                         sot=0
@@ -134,14 +112,13 @@ def live_loop():
                                 if "on target" in t:
                                     sot+=int(v)
                         if sot>=7:
-                            msg=f"💣 BOMBA 7 TIRI {minute}'\n{home} - {away}\nRISULTATO: {gh}-{ga}\nTiri in porta: {sot}\nLEGA: {league}\n➡️ OVER 0.5 / GOL"
+                            msg=f"💣 BOMBA 7 TIRI {minute}'\n{home} - {away}\n{gh}-{ga} Tiri:{sot}\n{league}\nOVER 0.5"
                             tg(msg)
                             sent_bomba.add(key)
 
-                    # --- SFIGATA per TOP ---
                     if country in TOP_NATIONS and minute>=75 and (gh==0 or ga==0) and key not in sent_sfigata:
                         if gh+ga<=1:
-                            msg=f"🍀 SFIGATA {minute}'\n{home} - {away}\n{gh}-{ga}\n{league} ({country})"
+                            msg=f"🍀 SFIGATA {minute}'\n{home} - {away}\n{gh}-{ga}\n{league}"
                             tg(msg)
                             sent_sfigata.add(key)
 
@@ -184,7 +161,7 @@ def poll_loop():
                     continue
 
                 if "status" in low:
-                    inf=f"✅ BOT V57.1 ATTIVO\nPausa: {is_paused}\nInviati:\nSfigata:{len(sent_sfigata)}\nPreparati:{len(sent_preparati)}\nBomba:{len(sent_bomba)}"
+                    inf=f"✅ BOT V57.2 ATTIVO\nPausa:{is_paused}\nSfigata:{len(sent_sfigata)}\nPreparati:{len(sent_preparati)}\nBomba:{len(sent_bomba)}"
                     tg(inf,cid,True)
                     continue
 
