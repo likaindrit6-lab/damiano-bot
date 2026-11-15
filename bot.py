@@ -42,7 +42,7 @@ def tg(m,cid=None,keys=False,chiusa=False,inline_btn=None):
 def make_bet365_btn(home,away):
   q=quote_plus(f"{home} {away}")
   url=f"https://www.bet365.com/search?q={q}"
-  return {"inline_keyboard": [[{"text": f"🎯 BET365 - {home} vs {away}", "url": url}]]}
+  return {"inline_keyboard": [[{"text": f"BET365 - {home} vs {away}", "url": url}]]}
 def api(url):
  try:
   r=requests.get(url,headers={"x-apisports-key":KEY},timeout=30)
@@ -99,7 +99,7 @@ def get_last10(team_id):
  try:
   u=f"https://v3.football.api-sports.io/fixtures?team={team_id}&last=10&status=FT"
   data=api(u)
-  if not data or data=="LIMIT": return "LIMIT"
+  if data=="LIMIT": return "LIMIT"
   tot=len(data)
   if tot<5: return None
   c15=0
@@ -212,7 +212,7 @@ def run_over90(cid=None):
    tg(out,cid,True)
   else: tg(f"0 partite 90% oggi. Controllate {chk}",cid,True)
  except Exception as e: tg(f"Errore Over90: {e}",cid,True)
-def run_bolla(cid=None): tg("BOLLA - funzione vecchia mantenuta, usa OVER 1.5 90% per nuova versione",cid,True)
+def run_bolla(cid=None): tg("BOLLA - funzione vecchia mantenuta",cid,True)
 def run_doppia(cid=None):
  try:
   today=datetime.now(ROME).strftime("%Y-%m-%d")
@@ -336,7 +336,7 @@ def build_builder_combo(odds):
  return combos[0] if combos else None
 def run_bad_builder(cid=None):
  try:
-  tg("BAD BUILDER 1.82 WORLDWIDE - GIORNO E NOTTE - Cerco in TUTTO IL MONDO...",cid,True)
+  tg("BAD BUILDER 1.82 WORLDWIDE - Cerco...",cid,True)
   now_rome=datetime.now(ROME); dates=[]
   for i in range(3): d=(now_rome+timedelta(days=i)).strftime("%Y-%m-%d"); dates.append(d)
   sel=[]
@@ -361,10 +361,10 @@ def run_bad_builder(cid=None):
     if len(sel)>=15: break
    if len(sel)>=15: break
   if sel:
-   out=f"BAD BUILDER 1.82 WORLDWIDE - {len(sel)} partite (MONDO)\n\n"
+   out=f"BAD BUILDER 1.82 WORLDWIDE - {len(sel)} partite\n\n"
    for i,m in enumerate(sel,1): out+=f"{i}. {m}\n\n"
    tg(out,cid,True)
-  else: tg("0 partite builder trovate in tutto il mondo adesso",cid,True)
+  else: tg("0 partite builder trovate",cid,True)
  except Exception as e: tg(f"Errore Builder: {e}",cid,True)
 def poll():
  global is_paused,last_id
@@ -386,6 +386,96 @@ def poll():
      msg=u.get("message",{}); txt=(msg.get("text") or "").strip(); low=txt.lower(); cid=msg.get("chat",{}).get("id")
      if not txt: continue
      if "chiudi menu" in low: tg("Menu chiuso",cid,True,True); continue
-     if "apri menu" in low: tg("Menu aperto FULL + OVER 1.5 90%",cid,True,False); continue
+     if "apri menu" in low: tg("Menu aperto FULL",cid,True,False); continue
      if "spegni" in low: is_paused=True; tg("PAUSA",cid,True); continue
-     if "accendi" in low or "/start" in low: is_paused=False; tg("V57.1 FINALE - PREPARATI 30-45 + BOM
+     if "accendi" in low or "/start" in low: is_paused=False; tg("V57.1 FINALE ATTIVO",cid,True); continue
+     if "status" in low: tg("STATUS V57.1 - OK",cid,True); continue
+     if "over 1.5" in low and "90" in low: run_over90(cid); continue
+     if "bolla" in low: run_bolla(cid); continue
+     if "doppia" in low: run_doppia(cid); continue
+     if "gialli" in low: run_gialli(cid); continue
+     if "angolo" in low and "builder" not in low: run_corner_over65(cid); continue
+     if "builder" in low: run_bad_builder(cid); continue
+  except: pass
+  time.sleep(2)
+def live_loop():
+ tg("BOT V57.1 FINALE ATTIVO - PREPARATI + BOMBA 7 TIRI",None,True)
+ while True:
+  try:
+   if is_paused: time.sleep(30); continue
+   now=datetime.now(ITALY)
+   if 2<=now.hour<6: time.sleep(300); continue
+   games=api("https://v3.football.api-sports.io/fixtures?live=all")
+   if games=="LIMIT": time.sleep(3600); continue
+   if not games: time.sleep(60); continue
+   for g in games:
+    fid=g.get("fixture",{}).get("id"); mm=g.get("fixture",{}).get("status",{}).get("elapsed")
+    if mm is None: continue
+    gh=g.get("goals",{}).get("home"); ga=g.get("goals",{}).get("away")
+    tm=g.get("teams",{}); home=tm.get("home",{}).get("name"); away=tm.get("away",{}).get("name")
+    lg=g.get("league",{}); label=f"[{lg.get('country','')} - {lg.get('name','')}]"
+    if fid not in av_sfiga_score: av_sfiga_score[fid]=(gh,ga)
+    else:
+     oh,oa=av_sfiga_score[fid]
+     if gh!=oh or ga!=oa:
+      chi="HOME" if gh>oh else "AWAY"; av_sfiga_score[fid]=(gh,ga)
+      sf=None
+      if lg.get("country") in TOP and fid not in av_sfiga_sent: sf=get_sfigata(fid)
+      if sf:
+       tipo,qs,tf,qf=sf
+       if chi==tipo:
+        sg=gh if tipo=="HOME" else ga; fg=ga if tipo=="HOME" else gh
+        if sg>=fg:
+         stato="PAREGGIA" if sg==fg else "VANTAGGIO"; ns=home if tipo=="HOME" else away; nf=away if tipo=="HOME" else home
+         btn=make_bet365_btn(home,away)
+         tg(f"SFIGATA {stato} {mm}' {label} {home} {gh}-{ga} {away} Sfigata {ns} @{qs} Favorita {nf} @{qf}",None,False,False,btn)
+         av_sfiga_sent.add(fid)
+    if 30<=mm<=45 and fid not in av_s_first:
+     u="https://v3.football.api-sports.io/fixtures/statistics?fixture="+str(fid)
+     st=api(u); sot=0; cor=0
+     if st and len(st)>=2:
+      for s in st:
+       for x in s.get("statistics",[]):
+        t=x.get("type","")
+        if "Shots on Goal" in t:
+         try: sot+=int(str(x.get("value") or 0))
+         except: pass
+        if "corner" in t.lower():
+         try: cor+=int(str(x.get("value") or 0))
+         except: pass
+     if sot>=4 or cor>=6:
+      btn=make_bet365_btn(home,away)
+      tg(f"PREPARATI {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}",None,False,False,btn)
+      av_s_first.add(fid)
+    if 60<=mm<=85 and fid not in av_live7:
+     u="https://v3.football.api-sports.io/fixtures/statistics?fixture="+str(fid)
+     st=api(u); sot=0
+     if st and len(st)>=2:
+      for s in st:
+       for x in s.get("statistics",[]):
+        t=x.get("type","")
+        if "Shots on Goal" in t:
+         try: sot+=int(str(x.get("value") or 0))
+         except: pass
+     if sot>=7:
+      q=get_live_quote_160_170(fid)
+      quota_txt=f"Quota Live: {q}" if q else "Quota: 1.60-1.70"
+      btn=make_bet365_btn(home,away)
+      tg(f"BOMBA 7 TIRI {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} {quota_txt} OVER 0.5 / NEXT GOAL",None,False,False,btn)
+      av_live7.add(fid)
+      av_g[fid]=gh+ga
+   for g in games:
+    fid=g.get("fixture",{}).get("id")
+    if fid in av_g:
+     gh2=g.get("goals",{}).get("home"); ga2=g.get("goals",{}).get("away")
+     if gh2+ga2>av_g[fid]:
+      lg=g.get("league",{}); label=f"[{lg.get('country','')} - {lg.get('name','')}]"; tm=g.get("teams",{}); hn=tm.get("home",{}).get("name"); an=tm.get("away",{}).get("name")
+      btn=make_bet365_btn(hn,an)
+      tg(f"GOAL VINTO! {label} {hn} {gh2}-{ga2} {an}",None,False,False,btn)
+      del av_g[fid]
+   time.sleep(60)
+  except Exception as e: print(e); time.sleep(15)
+print("AVVIO V57.1 FINALE...")
+threading.Thread(target=poll,daemon=True).start()
+threading.Thread(target=live_loop,daemon=True).start()
+while True: time.sleep(3600)
