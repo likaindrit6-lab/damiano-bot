@@ -1,6 +1,7 @@
 import os,time,requests,threading,json
 from datetime import datetime,timezone,timedelta
 from zoneinfo import ZoneInfo
+from urllib.parse import quote_plus
 BOT=os.getenv("BOT_TOKEN")
 CHAT=os.getenv("CHAT_ID")
 KEY=os.getenv("API_FOOTBALL_KEY")
@@ -11,6 +12,7 @@ last_id=0
 av_g={}
 av_s=set()
 av_s_first=set()
+av_live7=set()
 av_sfiga_score={}
 av_sfiga_sent=set()
 seen=set()
@@ -35,11 +37,9 @@ def is_youth(n):
 TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 65%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
 TAST_C=json.dumps({"keyboard":[["APRI MENU"]],"resize_keyboard":True})
 
-# ANTI-DOPPIO CACHE
 sent_cache={}
-def tg(m,cid=None,keys=False,chiusa=False):
+def tg(m,cid=None,keys=False,chiusa=False,inline_btn=None):
  try:
-  # Anti doppio: se stesso messaggio negli ultimi 30 sec, non inviare
   h=hash(m[:100])
   now=time.time()
   if h in sent_cache and now-sent_cache[h]<30:
@@ -50,7 +50,10 @@ def tg(m,cid=None,keys=False,chiusa=False):
    return
   base="https://api.telegram.org/bot"+BOT
   pay={"chat_id":cid,"text":m,"parse_mode":"HTML"}
-  if keys:
+  # SE C'E' BOTTONE BET365 USO INLINE
+  if inline_btn:
+   pay["reply_markup"]=inline_btn
+  elif keys:
    if chiusa:
     pay["reply_markup"]=json.loads(TAST_C)
    else:
@@ -58,6 +61,11 @@ def tg(m,cid=None,keys=False,chiusa=False):
   requests.post(base+"/sendMessage",json=pay,timeout=20)
  except Exception as e:
   print(e)
+
+def make_bet365_btn(home,away):
+  q=quote_plus(f"{home} {away}")
+  url=f"https://www.bet365.com/search?q={q}"
+  return {"inline_keyboard": [[{"text": f"🎯 BET365 - {home} vs {away}", "url": url}]]}
 
 def api(url):
  try:
@@ -68,7 +76,6 @@ def api(url):
  except:
   return []
 
-# [TUTTE LE TUE FUNZIONI get_sfigata, get_over_odd, get_last10, get_best90, ecc SONO UGUALI, LE HO LASCIATE]
 def get_sfigata(fid):
  try:
   u="https://v3.football.api-sports.io/odds?fixture="+str(fid)
@@ -112,6 +119,27 @@ def get_over_odd(fid):
  except:
   pass
  return None
+
+# NUOVA FUNZIONE QUOTE LIVE 1.60-1.70
+def get_live_quote_160_170(fid):
+ try:
+  u=f"https://v3.football.api-sports.io/odds/live?fixture={fid}"
+  data=api(u)
+  if not data or data=="LIMIT":
+   return None
+  for book in data[0].get("bookmakers",[])[:3]:
+   for bet in book.get("bets",[]):
+    for v in bet.get("values",[]):
+     try:
+      odd=float(v.get("odd"))
+      if 1.60 <= odd <= 1.75:
+       if "Over" in v.get("value","") or "Goal" in bet.get("name",""):
+        return odd
+     except:
+      continue
+  return None
+ except:
+  return None
 
 def get_last10(team_id):
  try:
@@ -588,10 +616,10 @@ def poll():
       continue
      if "accendi" in low or "/start" in low:
       is_paused=False
-      tg("V55 NO DOPPIO ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE",cid,True)
+      tg("V56 BET365 + 7 TIRI + QUOTE 1.60 ATTIVO",cid,True)
       continue
      if "status" in low:
-      tg("STATUS V55 NO DOPPIO OK - 1 SOLO BOT",cid,True)
+      tg("STATUS V56 - BET365 BUTTON + 7 TIRI 60-85 + QUOTE 1.60-1.70 OK",cid,True)
       continue
      if "over 1.5" in low and "90" in low:
       run_over90(cid)
@@ -616,7 +644,7 @@ def poll():
   time.sleep(2)
 
 def live_loop():
- tg("BOT V55 NO DOPPIO ATTIVO",None,True)
+ tg("BOT V56 - BET365 + 7 TIRI + 1.60 ATTIVO",None,True)
  while True:
   try:
    if is_paused:
@@ -664,7 +692,8 @@ def live_loop():
          stato="PAREGGIA" if sg==fg else "VANTAGGIO"
          ns=home if tipo=="HOME" else away
          nf=away if tipo=="HOME" else home
-         tg(f"⚫ SFIGATA {stato} {mm}' {label} {home} {gh}-{ga} {away}\nSfigata {ns} @{qs}\nFavorita {nf} @{qf}")
+         btn=make_bet365_btn(home,away)
+         tg(f"⚫ SFIGATA {stato} {mm}' {label} {home} {gh}-{ga} {away}\nSfigata {ns} @{qs}\nFavorita {nf} @{qf}",None,False,False,btn)
          av_sfiga_sent.add(fid)
     if 30<=mm<=45 and fid not in av_s_first:
      u="https://v3.football.api-sports.io/fixtures/statistics?fixture="+str(fid)
@@ -686,8 +715,31 @@ def live_loop():
          except:
           pass
      if sot>=4 or cor>=6:
-      tg(f"🔥 PREPARATI {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}")
+      btn=make_bet365_btn(home,away)
+      tg(f"🔥 PREPARATI {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}",None,False,False,btn)
       av_s_first.add(fid)
+    # NUOVO SEGNALE 7 TIRI 60-85
+    if 60<=mm<=85 and fid not in av_live7:
+     u="https://v3.football.api-sports.io/fixtures/statistics?fixture="+str(fid)
+     st=api(u)
+     sot=0
+     if st and len(st)>=2:
+      for s in st:
+       for x in s.get("statistics",[]):
+        t=x.get("type","")
+        if "Shots on Goal" in t:
+         try:
+          sot+=int(str(x.get("value") or 0))
+         except:
+          pass
+     if sot>=7:
+      # Controllo quota 1.60-1.70 opzionale
+      q=get_live_quote_160_170(fid)
+      quota_txt=f"Quota Live: {q}" if q else "Quota Live: check 1.60-1.70"
+      btn=make_bet365_btn(home,away)
+      tg(f"💥 BOMBA 7 TIRI {mm}' {label}\n{home} {gh}-{ga} {away}\nTiri in porta: {sot}\n{quota_txt}\n👉 OVER 0.5 o NEXT GOAL 1.60-1.70",None,False,False,btn)
+      av_live7.add(fid)
+      av_g[fid]=gh+ga
     if 65<=mm<=90 and fid not in av_s:
      u="https://v3.football.api-sports.io/fixtures/statistics?fixture="+str(fid)
      st=api(u)
@@ -708,7 +760,8 @@ def live_loop():
          except:
           pass
      if sot>=4 or cor>=6:
-      tg(f"🚀 GIOCALO {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}")
+      btn=make_bet365_btn(home,away)
+      tg(f"🚀 GIOCALO {mm}' {label} {home} {gh}-{ga} {away} Tiri:{sot} Corner:{cor}",None,False,False,btn)
       av_s.add(fid)
       av_g[fid]=gh+ga
    for g in games:
@@ -722,15 +775,15 @@ def live_loop():
       tm=g.get("teams",{})
       hn=tm.get("home",{}).get("name")
       an=tm.get("away",{}).get("name")
-      tg(f"🟢 GOAL VINTO! {label} {hn} {gh2}-{ga2} {an}")
+      btn=make_bet365_btn(hn,an)
+      tg(f"🟢 GOAL VINTO! {label} {hn} {gh2}-{ga2} {an}",None,False,False,btn)
       del av_g[fid]
    time.sleep(60)
   except Exception as e:
    print(e)
    time.sleep(15)
 
-# AVVIO SENZA FLASK - ANTI DOPPIO
-print("AVVIO V55 NO DOPPIO...")
+print("AVVIO V56 BET365 + 7 TIRI + QUOTE 1.60...")
 threading.Thread(target=poll,daemon=True).start()
 threading.Thread(target=live_loop,daemon=True).start()
 while True:
