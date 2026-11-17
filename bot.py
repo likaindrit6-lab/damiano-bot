@@ -1,6 +1,6 @@
 import os,time,requests,threading,json,fcntl
 from flask import Flask
-from datetime import datetime,timezone,timedelta
+from datetime import datetime,timezone,timedelta,date
 from zoneinfo import ZoneInfo
 from urllib.parse import quote
 BOT=os.getenv("BOT_TOKEN")
@@ -36,8 +36,8 @@ def is_youth(n):
 app=Flask(__name__)
 @app.route("/")
 def home():
- return "BOT V54 FULL + OVER 1.5 90% + BUILDER WORLDWIDE",200
-TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 65%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
+ return "BOT V54 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET",200
+TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 65%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["BASKET HANDICAP 12+"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
 TAST_C=json.dumps({"keyboard":[["APRI MENU"]],"resize_keyboard":True})
 def tg(m,cid=None,keys=False,chiusa=False):
  try:
@@ -73,7 +73,7 @@ def tg_inline(m,rows,cid=None):
   print(e)
 def match_buttons(home,away):
  link=BET365_URL+quote(f"{home} {away}")
- return [{"text":"🔗 APRI SU BET365","url":link},{"text":"💰 DC + MULTIGOL 1-5","url":link}]
+ return [{"text":"🔗 APRI SU BET365","url":link},{"text":"💰 DC + Multigol 1-5","url":link}]
 def get_sot(fid):
  st=api(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
  if st=="LIMIT" or not st or len(st)<2:
@@ -511,8 +511,8 @@ def run_bad_builder(cid=None):
    d=(now_rome+timedelta(days=i)).strftime("%Y-%m-%d")
    dates.append(d)
   sel=[]
-  for date in dates:
-   data=api(f"https://v3.football.api-sports.io/fixtures?date={date}") or []
+  for dt in dates:
+   data=api(f"https://v3.football.api-sports.io/fixtures?date={dt}") or []
    if data=="LIMIT":
     time.sleep(60)
     continue
@@ -533,7 +533,7 @@ def run_bad_builder(cid=None):
      fdt=datetime.fromisoformat(fd).astimezone(ROME)
      ora=fdt.strftime("%d/%m %H:%M")
     except:
-     ora=date
+     ora=dt
     odds=get_builder_odds(fid)
     if not odds or len(odds)<2:
      time.sleep(0.2)
@@ -556,6 +556,107 @@ def run_bad_builder(cid=None):
    tg("0 partite builder trovate in tutto il mondo adesso",cid,True)
  except Exception as e:
   tg(f"Errore Builder: {e}",cid,True)
+
+# --- BASKETBALL: HANDICAP 12+ ---
+_basket_cache={}
+def basket_api(path):
+ try:
+  r=requests.get("https://v1.basketball.api-sports.io"+path,headers={"x-apisports-key":KEY},timeout=30)
+  if r.status_code==429:
+   return "LIMIT"
+  return r.json().get("response",[])
+ except:
+  return []
+def get_basket_handicap_games():
+ today=date.today().strftime('%Y-%m-%d')
+ games=basket_api(f"/games?date={today}")
+ if not games or games=="LIMIT":
+  return []
+ sel=[]
+ for g in games:
+  gid=g.get("id")
+  if not gid:
+   continue
+  odds=basket_api(f"/odds?game={gid}")
+  time.sleep(0.4)
+  if not odds or odds=="LIMIT":
+   continue
+  hcp=None
+  for o in odds:
+   for b in o.get("bets",[]):
+    bn=(b.get("name") or "").lower()
+    if "handicap" in bn or "spread" in bn:
+     for v in b.get("values",[]):
+      try:
+       vv=float(v.get("value"))
+      except:
+       continue
+      if vv>=12:
+       hcp=vv
+       break
+     if hcp:
+      break
+    if hcp:
+     break
+  if hcp and hcp>=12:
+   lg=g.get("league",{})
+   sel.append({
+    "id":gid,
+    "time":g.get("time",""),
+    "league":(lg.get("name") or ""),
+    "country":(lg.get("country") or ""),
+    "home":g.get("teams",{}).get("home",{}).get("name","?"),
+    "away":g.get("teams",{}).get("away",{}).get("name","?"),
+    "handicap":hcp
+   })
+ _basket_cache["today"]=sel
+ _basket_cache["date"]=today
+ return sel
+def run_basket_handicap(cid=None):
+ try:
+  tg("🏀 BASKET HANDICAP 12+ - Analizzo partite di oggi nel mondo...",cid,True)
+  sel=get_basket_handicap_games()
+  if sel:
+   out=f"🏀 BASKET HANDICAP 12+ ODIERNE - Trovate {len(sel)} partite\n\n"
+   for i,g in enumerate(sel,1):
+    ora=g["time"][11:16] if len(g["time"])>=16 else g["time"]
+    out+=f"{i}. {ora} - {g['league']} - {g['home']} vs {g['away']} - Handicap {g['handicap']}\n"
+   tg(out,cid,True)
+  else:
+   tg(f"🏀 BASKET HANDICAP 12+ ODIERNE - Trovate 0 partite",cid,True)
+ except Exception as e:
+  tg(f"Errore Basket Handicap: {e}",cid,True)
+def check_basket_alert():
+ avvisati=set()
+ while True:
+  try:
+   if is_paused:
+    time.sleep(600)
+    continue
+   today=date.today().strftime('%Y-%m-%d')
+   if _basket_cache.get("date")==today:
+    sel=_basket_cache.get("today",[])
+   else:
+    sel=get_basket_handicap_games()
+   now=datetime.now(ROME)
+   for g in sel:
+    gid=g.get("id")
+    if gid in avvisati:
+     continue
+    try:
+     fd=(g.get("time") or "").replace("Z","+00:00")
+     fdt=datetime.fromisoformat(fd).astimezone(ROME)
+    except:
+     continue
+    diff=fdt-now
+    mins=diff.total_seconds()/60
+    if 15<=mins<=30:
+     ora=fdt.strftime("%H:%M")
+     tg(f"⏰ TRA 20 MIN - BASKET - {g['league']} - {g['home']} vs {g['away']} - Handicap {g['handicap']} - Inizia alle {ora}")
+     avvisati.add(gid)
+  except Exception as e:
+   print(e)
+  time.sleep(600)
 
 def acquire_single_instance():
  f=open("/tmp/bot_v54.lock","w")
@@ -607,7 +708,10 @@ def poll():
       tg("V54 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE",cid,True)
       continue
      if "status" in low:
-      tg("STATUS V54 FULL + BUILDER WORLDWIDE OK",cid,True)
+      tg("STATUS V54 FULL + BUILDER WORLDWIDE + BASKET OK",cid,True)
+      continue
+     if "basket" in low or "handicap" in low or "12+" in low:
+      run_basket_handicap(cid)
       continue
      if "over 1.5" in low and "90" in low:
       run_over90(cid)
@@ -761,5 +865,6 @@ if _LOCK:
  threading.Thread(target=poll,daemon=True).start()
  threading.Thread(target=live_loop,daemon=True).start()
  threading.Thread(target=check_tripla_automatica,daemon=True).start()
+ threading.Thread(target=check_basket_alert,daemon=True).start()
 if __name__=="__main__":
  app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)),use_reloader=False)
