@@ -37,7 +37,7 @@ def is_youth(n):
 app=Flask(__name__)
 @app.route("/")
 def home():
- return "BOT V68 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET HANDICAP 12+",200
+ return "BOT V71 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET HANDICAP 12+ + BET365",200
 TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 65%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["BASKET HANDICAP 12+"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
 TAST_C=json.dumps({"keyboard":[["APRI MENU"]],"resize_keyboard":True})
 def tg(m,cid=None,keys=False,chiusa=False):
@@ -63,7 +63,6 @@ def api(url):
   return r.json().get("response",[])
  except:
   return []
-BET365_URL="https://www.bet365.com/#/AC/B1/C1/D8/E2/F3/"
 def tg_inline(m,rows,cid=None):
  try:
   cid=cid or CHAT
@@ -72,15 +71,21 @@ def tg_inline(m,rows,cid=None):
   requests.post("https://api.telegram.org/bot"+BOT+"/sendMessage",json={"chat_id":cid,"text":m,"parse_mode":"HTML","reply_markup":{"inline_keyboard":rows}},timeout=20)
  except Exception as e:
   print(e)
+def bet365_link(home,away):
+ return f"https://www.bet365.com/search?q={quote(home + ' ' + away)}"
+def bet365_button(home,away):
+ return [{"text":"🎯 Bet365 - Vai alla partita","url":bet365_link(home,away)}]
 def match_buttons(home,away):
- link=BET365_URL+quote(f"{home} {away}")
- return [{"text":"🔗 APRI SU BET365","url":link},{"text":"💰 DC + Multigol 1-5","url":link}]
+ link=bet365_link(home,away)
+ return [{"text":"🎯 Bet365 - Vai alla partita","url":link},{"text":"💰 DC + Multigol 1-5","url":link}]
 def get_sot(fid):
  st=api(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
  if st=="LIMIT" or not st or len(st)<2:
   return None
  sot=0
  for s in st:
+  if not isinstance(s,dict):
+   continue
   for x in s.get("statistics",[]):
    if "Shots on Goal" in (x.get("type") or ""):
     try:
@@ -248,13 +253,15 @@ def run_corner_over65(cid=None):
     ora=fdt.strftime("%H:%M")
     hn=tm.get("home",{}).get("name")
     an=tm.get("away",{}).get("name")
-    sel.append((avg,f"{ora} [{co}] {hn} vs {an} -> Media {avg:.1f} - OVER 6.5"))
+    sel.append((avg,f"{ora} [{co}] {hn} vs {an} -> Media {avg:.1f} - OVER 6.5",hn,an))
   if sel:
    sel.sort(key=lambda x: x[0], reverse=True)
    out=f"OVER 6.5 ANGOLI PRE MATCH - {len(sel)} partite OGGI (su {chk})\n\n"
-   for i,(a,m) in enumerate(sel,1):
+   rows=[]
+   for i,(a,m,hn,an) in enumerate(sel,1):
     out+=f"{i}. {m}\n"
-   tg(out,cid,True)
+    rows.append(bet365_button(hn,an))
+   tg_inline(out,rows,cid)
   else:
    tg(f"0 partite con media Over 6.5 oggi. Analizzate {chk}",cid,True)
  except Exception as e:
@@ -301,14 +308,16 @@ def run_over90(cid=None):
    hn=tm.get("home",{}).get("name")
    an=tm.get("away",{}).get("name")
    ln=lg.get("name","")
-   sel.append(f"{ora} [{co} - {ln}] {hn} vs {an} -> Over 1.5 @ {perc:.0f}%")
+   sel.append((f"{ora} [{co} - {ln}] {hn} vs {an} -> Over 1.5 @ {perc:.0f}%",hn,an))
    if len(sel)>=20:
     break
   if sel:
    out=f"OVER 1.5 90% NAZIONI - {len(sel)} partite\n\n"
-   for i,m in enumerate(sel,1):
+   rows=[]
+   for i,(m,hn,an) in enumerate(sel,1):
     out+=f"{i}. {m}\n"
-   tg(out,cid,True)
+    rows.append(bet365_button(hn,an))
+   tg_inline(out,rows,cid)
   else:
    tg(f"0 partite 90% oggi. Controllate {chk}",cid,True)
  except Exception as e:
@@ -341,15 +350,17 @@ def run_doppia(cid=None):
    hn=tm.get("home",{}).get("name")
    an=tm.get("away",{}).get("name")
    ln=lg.get("name","")
-   out.append(f"{ora} [{co} - {ln}] {hn} vs {an} OVER 1.5 @ {odd}")
+   out.append((f"{ora} [{co} - {ln}] {hn} vs {an} OVER 1.5 @ {odd}",hn,an))
    time.sleep(0.3)
    if len(out)>=15:
     break
   if out:
    txt="DOPPIA "+str(len(out))+" OVER 1.5\n\n"
-   for i,m in enumerate(out,1):
+   rows=[]
+   for i,(m,hn,an) in enumerate(out,1):
     txt+=f"{i}. {m}\n"
-   tg(txt,cid,True)
+    rows.append(bet365_button(hn,an))
+   tg_inline(txt,rows,cid)
   else:
    tg("Nessuna DOPPIA oggi",cid,True)
  except Exception as e:
@@ -445,14 +456,16 @@ def run_gialli(cid=None):
     hn=tm.get("home",{}).get("name")
     an=tm.get("away",{}).get("name")
     ln=lg.get("name","")
-    sel.append(f"{ora} [{co} - {ln}] {hn} vs {an} -> Gialli {avg:.0f}%")
+    sel.append((f"{ora} [{co} - {ln}] {hn} vs {an} -> Gialli {avg:.0f}%",hn,an))
     if len(sel)>=15:
      break
   if sel:
    out=f"GIALLI 65% - {len(sel)} partite\n\n"
-   for i,m in enumerate(sel,1):
+   rows=[]
+   for i,(m,hn,an) in enumerate(sel,1):
     out+=f"{i}. {m}\n"
-   tg(out,cid,True)
+    rows.append(bet365_button(hn,an))
+   tg_inline(out,rows,cid)
   else:
    tg(f"0 partite gialli 65% oggi. Controllate {chk} su {len(eligible)} nel mondo",cid,True)
  except Exception as e:
@@ -542,7 +555,7 @@ def run_bad_builder(cid=None):
     combo=build_builder_combo(odds)
     if combo:
      tot,desc=combo
-     sel.append(f"{ora} [{co} - {ln}] {hn} vs {an}\n -> {desc}")
+     sel.append((f"{ora} [{co} - {ln}] {hn} vs {an}\n -> {desc}",hn,an))
     time.sleep(0.3)
     if len(sel)>=15:
      break
@@ -550,9 +563,11 @@ def run_bad_builder(cid=None):
     break
   if sel:
    out=f"BAD BUILDER 1.82 WORLDWIDE - {len(sel)} partite (MONDO)\n\n"
-   for i,m in enumerate(sel,1):
+   rows=[]
+   for i,(m,hn,an) in enumerate(sel,1):
     out+=f"{i}. {m}\n\n"
-   tg(out,cid,True)
+    rows.append(bet365_button(hn,an))
+   tg_inline(out,rows,cid)
   else:
    tg("0 partite builder trovate in tutto il mondo adesso",cid,True)
  except Exception as e:
@@ -592,6 +607,11 @@ def odds_api(url):
   if r.status_code==429:
    return []
   data=r.json()
+  if isinstance(data,str):
+   try:
+    data=json.loads(data)
+   except:
+    return []
   if isinstance(data,list):
    return data
   return []
@@ -601,6 +621,11 @@ def odds_api(url):
 def get_basket_games_today():
  today_str=datetime.now(ROME).strftime("%Y-%m-%d")
  sports=odds_api("https://api.the-odds-api.com/v4/sports/?apiKey="+str(ODDS_KEY or ""))
+ if isinstance(sports,str):
+  try:
+   sports=json.loads(sports)
+  except:
+   sports=[]
  if not isinstance(sports,list) or not sports:
   return []
  games=[]
@@ -610,7 +635,12 @@ def get_basket_games_today():
   sk=sp.get("key","")
   if not isinstance(sk,str) or "basket" not in sk:
    continue
-  data=odds_api(f"https://api.the-odds-api.com/v4/sports/{sk}/odds/?apiKey={ODDS_KEY}&regions=eu&markets=spreads")
+  data=odds_api(f"https://api.the-odds-api.com/v4/sports/{sk}/odds/?apiKey={ODDS_KEY}&regions=eu&markets=spreads,alternate_spreads")
+  if isinstance(data,str):
+   try:
+    data=json.loads(data)
+   except:
+    data=[]
   if not isinstance(data,list) or not data:
    continue
   for gm in data:
@@ -627,6 +657,10 @@ def get_basket_games_today():
 def check_handicap_12_market(game):
  if not isinstance(game,dict):
   return False,None,None,None
+ best_line=None
+ best_odd=None
+ best_team=None
+ best_book=None
  for bm in game.get("bookmakers",[]):
   if not isinstance(bm,dict):
    continue
@@ -634,11 +668,8 @@ def check_handicap_12_market(game):
    if not isinstance(mkt,dict):
     continue
    mkey=mkt.get("key","")
-   if mkey not in ("spreads","asian_handicap","handicap","hcap"):
+   if mkey not in ("spreads","asian_handicap","handicap","hcap","alternate_spreads","alternate_spreads_2","alternate_spreads_3"):
     continue
-   best_line=None
-   best_odd=None
-   best_team=None
    for out in mkt.get("outcomes",[]):
     if not isinstance(out,dict):
      continue
@@ -646,16 +677,21 @@ def check_handicap_12_market(game):
      pt=float(out.get("point",0))
     except:
      continue
-    if abs(pt)>=11.5:
+    if abs(pt)>=10.5:
      price=out.get("price")
      if price is None:
       continue
-     if best_odd is None or price>best_odd:
+     try:
+      pf=float(price)
+     except:
+      continue
+     if best_odd is None or pf>best_odd:
       best_line=pt
-      best_odd=price
+      best_odd=pf
       best_team=out.get("name","")
-   if best_line is not None:
-    return True,best_line,best_odd,best_team
+      best_book=bm.get("title","")
+ if best_line is not None:
+  return True,best_line,best_odd,best_team
  return False,None,None,None
 
 def _format_basket_date(ct):
@@ -698,9 +734,11 @@ def run_basket_handicap(cid=None):
   if sel:
    data_str=datetime.now(ROME).strftime("%d/%m/%Y")
    out=f"🏀 BASKET HANDICAP +12 - Partite di oggi [{data_str}]\n\n"
+   rows=[]
    for _,ora,league,home,away,line_str,odd in sel:
     out+=f"⏰ {ora} - {league} - {home} vs {away} | Spread {line_str} @ {odd:.2f}\n"
-   tg(out,cid,True)
+    rows.append(bet365_button(home,away))
+   tg_inline(out,rows,cid)
   else:
    tg("Nessuna partita con Handicap +12 oggi, riprovo più tardi",cid,True)
  except Exception as e:
@@ -743,14 +781,15 @@ def check_basket_alert():
      sk=gm.get("_sport_key","")
      league=LEAGUE_NAMES.get(sk,sk.replace("basketball_","").upper()) if sk else "?"
      sign="+" if line>0 else ""
-     tg(f"⚠️ TRA 15 MINUTI - 🏀 {league} {home} vs {away} - Handicap {sign}{line} @ {odd:.2f}")
+     msg=f"⚠️ TRA 15 MINUTI - 🏀 {league} {home} vs {away} - Handicap {sign}{line} @ {odd:.2f}"
+     tg_inline(msg,[bet365_button(home,away)])
      _basket_alert_sent.add(gid)
   except Exception as e:
    print(e)
   time.sleep(60)
 
 def acquire_single_instance():
- f=open("/tmp/bot_v68.lock","w")
+ f=open("/tmp/bot_v71.lock","w")
  try:
   fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)
   return f
@@ -796,10 +835,10 @@ def poll():
       continue
      if "accendi" in low or "/start" in low:
       is_paused=False
-      tg("V68 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+",cid,True)
+      tg("V71 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ + BET365",cid,True)
       continue
      if "status" in low:
-      tg("STATUS V68 FULL + BUILDER WORLDWIDE + BASKET HANDICAP 12+ OK",cid,True)
+      tg("STATUS V71 FULL + BUILDER WORLDWIDE + BASKET HANDICAP 12+ + BET365 OK",cid,True)
       continue
      if "basket" in low or "handicap" in low or "12+" in low:
       run_basket_handicap(cid)
@@ -826,7 +865,7 @@ def poll():
    pass
   time.sleep(2)
 def live_loop():
- tg("BOT V68 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ ATTIVO",None,True)
+ tg("BOT V71 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ + BET365 ATTIVO",None,True)
  while True:
   try:
    if is_paused:
