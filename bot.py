@@ -72,7 +72,7 @@ def tg_inline(m,rows,cid=None):
  except Exception as e:
   print(e)
 def bet365_link(home,away):
- return f"https://www.bet365.com/search?q={quote(home + ' ' + away)}"
+ return f"https://www.bet365.com/#/Search/?q={quote(home)}%20vs%20{quote(away)}"
 def bet365_button(home,away):
  return [{"text":"🎯 Bet365 - Vai alla partita","url":bet365_link(home,away)}]
 def match_buttons(home,away):
