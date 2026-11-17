@@ -37,8 +37,8 @@ def is_youth(n):
 app=Flask(__name__)
 @app.route("/")
 def home():
- return "BOT V71 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET HANDICAP 12+ + BET365",200
-TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 65%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["BASKET HANDICAP 12+"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
+ return "BOT V73 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET HANDICAP 12+ WORLDWIDE + BET365",200
+TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 65%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["BASKET HANDICAP 12+ WORLDWIDE"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
 TAST_C=json.dumps({"keyboard":[["APRI MENU"]],"resize_keyboard":True})
 def tg(m,cid=None,keys=False,chiusa=False):
  try:
@@ -603,7 +603,7 @@ LEAGUE_NAMES={
 
 def odds_api(url):
  try:
-  r=requests.get(url,timeout=30)
+  r=requests.get(url,timeout=20)
   if r.status_code==429:
    return []
   data=r.json()
@@ -618,41 +618,60 @@ def odds_api(url):
  except:
   return []
 
+def get_all_basketball_sports():
+ try:
+  url=f"https://api.the-odds-api.com/v4/sports/?apiKey={ODDS_KEY or ''}"
+  data=odds_api(url)
+  if isinstance(data,str):
+   try:
+    data=json.loads(data)
+   except:
+    data=[]
+  if not isinstance(data,list):
+   return []
+  sports=[]
+  for sp in data:
+   if not isinstance(sp,dict):
+    continue
+   key=sp.get("key","")
+   if not isinstance(key,str):
+    continue
+   if key.startswith("basketball_"):
+    sports.append(key)
+  return sports
+ except:
+  return []
+
 def get_basket_games_today():
  today_str=datetime.now(ROME).strftime("%Y-%m-%d")
- sports=odds_api("https://api.the-odds-api.com/v4/sports/?apiKey="+str(ODDS_KEY or ""))
- if isinstance(sports,str):
-  try:
-   sports=json.loads(sports)
-  except:
-   sports=[]
- if not isinstance(sports,list) or not sports:
-  return []
- games=[]
- for sp in sports:
-  if not isinstance(sp,dict):
-   continue
-  sk=sp.get("key","")
-  if not isinstance(sk,str) or "basket" not in sk:
-   continue
-  data=odds_api(f"https://api.the-odds-api.com/v4/sports/{sk}/odds/?apiKey={ODDS_KEY}&regions=eu&markets=spreads,alternate_spreads")
+ all_games=[]
+ total_api=0
+ sports=get_all_basketball_sports()
+ total_leagues=len(sports)
+ for sport in sports:
+  url=f"https://api.the-odds-api.com/v4/sports/{sport}/odds/?apiKey={ODDS_KEY or ''}&regions=eu,us,uk,au&markets=spreads,alternate_spreads,h2h,spreads_alt&oddsFormat=decimal"
+  data=odds_api(url)
   if isinstance(data,str):
    try:
     data=json.loads(data)
    except:
     data=[]
   if not isinstance(data,list) or not data:
+   time.sleep(0.2)
    continue
+  total_api+=len(data)
   for gm in data:
    if not isinstance(gm,dict):
     continue
    ct=gm.get("commence_time","")
-   if not isinstance(ct,str) or not ct.startswith(today_str):
+   if not isinstance(ct,str):
     continue
-   gm["_sport_key"]=sk
-   games.append(gm)
-  time.sleep(0.3)
- return games
+   if not ct.startswith(today_str):
+    continue
+   gm["_sport_key"]=sport
+   all_games.append(gm)
+  time.sleep(0.2)
+ return all_games,total_api,total_leagues
 
 def check_handicap_12_market(game):
  if not isinstance(game,dict):
@@ -660,7 +679,6 @@ def check_handicap_12_market(game):
  best_line=None
  best_odd=None
  best_team=None
- best_book=None
  for bm in game.get("bookmakers",[]):
   if not isinstance(bm,dict):
    continue
@@ -668,13 +686,16 @@ def check_handicap_12_market(game):
    if not isinstance(mkt,dict):
     continue
    mkey=mkt.get("key","")
-   if mkey not in ("spreads","asian_handicap","handicap","hcap","alternate_spreads","alternate_spreads_2","alternate_spreads_3"):
+   if mkey not in ("spreads","alternate_spreads","spreads_alt","hcap","alternate_hcap","asian_handicap","handicap"):
     continue
    for out in mkt.get("outcomes",[]):
     if not isinstance(out,dict):
      continue
+    pt=out.get("point")
+    if pt is None:
+     continue
     try:
-     pt=float(out.get("point",0))
+     pt=float(pt)
     except:
      continue
     if abs(pt)>=10.5:
@@ -689,7 +710,6 @@ def check_handicap_12_market(game):
       best_line=pt
       best_odd=pf
       best_team=out.get("name","")
-      best_book=bm.get("title","")
  if best_line is not None:
   return True,best_line,best_odd,best_team
  return False,None,None,None
@@ -703,8 +723,8 @@ def _format_basket_date(ct):
 
 def run_basket_handicap(cid=None):
  try:
-  tg("🏀 BASKET HANDICAP 12+ - Analizzo partite di oggi nel mondo...",cid,True)
-  games=get_basket_games_today()
+  tg("🏀 BASKET HANDICAP 12+ WORLDWIDE - Analizzo TUTTI i campionati basket del mondo...",cid,True)
+  games,total_api,total_leagues=get_basket_games_today()
   if isinstance(games,str):
    try:
     games=json.loads(games)
@@ -733,14 +753,15 @@ def run_basket_handicap(cid=None):
    sel.append((fdt,ora,league,home,away,f"{sign}{line}",odd))
   if sel:
    data_str=datetime.now(ROME).strftime("%d/%m/%Y")
-   out=f"🏀 BASKET HANDICAP +12 - Partite di oggi [{data_str}]\n\n"
+   out=f"🏀 BASKET HANDICAP +12 WORLDWIDE - Partite di oggi [{data_str}]\n"
+   out+=f"📊 Controllati {total_leagues} campionati, {total_api} partite totali API, {len(games)} di oggi\n\n"
    rows=[]
    for _,ora,league,home,away,line_str,odd in sel:
     out+=f"⏰ {ora} - {league} - {home} vs {away} | Spread {line_str} @ {odd:.2f}\n"
     rows.append(bet365_button(home,away))
    tg_inline(out,rows,cid)
   else:
-   tg("Nessuna partita con Handicap +12 oggi, riprovo più tardi",cid,True)
+   tg(f"🏀 DEBUG: Ho controllato {total_leagues} campionati basket mondiali, API ha risposto con {total_api} partite totali, {len(games)} di oggi. Key={'SI' if ODDS_KEY else 'NO - manca ODDS_API_KEY'}",cid,True)
  except Exception as e:
   tg(f"Errore Basket Handicap: {e}",cid,True)
 
@@ -756,7 +777,7 @@ def check_basket_alert():
    if _basket_cache.get("date")==today_str and cache_age<600 and isinstance(cached,list):
     games=cached
    else:
-    games=get_basket_games_today()
+    games,_,_=get_basket_games_today()
     _basket_cache["games"]=games
     _basket_cache["date"]=today_str
    now=datetime.now(ROME)
@@ -789,7 +810,7 @@ def check_basket_alert():
   time.sleep(60)
 
 def acquire_single_instance():
- f=open("/tmp/bot_v71.lock","w")
+ f=open("/tmp/bot_v73.lock","w")
  try:
   fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)
   return f
@@ -835,10 +856,10 @@ def poll():
       continue
      if "accendi" in low or "/start" in low:
       is_paused=False
-      tg("V71 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ + BET365",cid,True)
+      tg("V73 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ WORLDWIDE + BET365",cid,True)
       continue
      if "status" in low:
-      tg("STATUS V71 FULL + BUILDER WORLDWIDE + BASKET HANDICAP 12+ + BET365 OK",cid,True)
+      tg("STATUS V73 FULL + BUILDER WORLDWIDE + BASKET HANDICAP 12+ WORLDWIDE + BET365 OK",cid,True)
       continue
      if "basket" in low or "handicap" in low or "12+" in low:
       run_basket_handicap(cid)
@@ -865,7 +886,7 @@ def poll():
    pass
   time.sleep(2)
 def live_loop():
- tg("BOT V71 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ + BET365 ATTIVO",None,True)
+ tg("BOT V73 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ WORLDWIDE + BET365 ATTIVO",None,True)
  while True:
   try:
    if is_paused:
