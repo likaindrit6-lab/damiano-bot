@@ -36,7 +36,7 @@ def is_youth(n):
 app=Flask(__name__)
 @app.route("/")
 def home():
- return "BOT V54 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET",200
+ return "BOT V55 BETANO LIVE DIRECT",200
 TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 65%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["BASKET HANDICAP 12+"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
 TAST_C=json.dumps({"keyboard":[["APRI MENU"]],"resize_keyboard":True})
 def tg(m,cid=None,keys=False,chiusa=False):
@@ -62,7 +62,8 @@ def api(url):
   return r.json().get("response",[])
  except:
   return []
-BET365_URL="https://www.bet365.com/#/AC/B1/C1/D8/E2/F3/"
+# NUOVO BOOKMAKER DIRETTO - SOSTITUISCE BET365
+BETANO_BASE="https://www.betano.it/search/?q="
 def tg_inline(m,rows,cid=None):
  try:
   cid=cid or CHAT
@@ -72,8 +73,9 @@ def tg_inline(m,rows,cid=None):
  except Exception as e:
   print(e)
 def match_buttons(home,away):
- link=BET365_URL+quote(f"{home} {away}")
- return [{"text":"🔗 APRI SU BET365","url":link},{"text":"💰 DC + Multigol 1-5","url":link}]
+ q=quote(f"{home} {away}")
+ link=BETANO_BASE+q
+ return [{"text":"🔴 APRI LIVE SU BETANO","url":link},{"text":"💰 DC + Multigol 1-5","url":link}]
 def get_sot(fid):
  st=api(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
  if st=="LIMIT" or not st or len(st)<2:
@@ -353,7 +355,6 @@ def run_doppia(cid=None):
    tg("Nessuna DOPPIA oggi",cid,True)
  except Exception as e:
   tg(f"Errore doppia {e}",cid,True)
-
 def get_gialli_avg_team(team_id):
  try:
   u=f"https://v3.football.api-sports.io/fixtures?team={team_id}&last=10&status=FT"
@@ -456,8 +457,6 @@ def run_gialli(cid=None):
    tg(f"0 partite gialli 65% oggi. Controllate {chk} su {len(eligible)} nel mondo",cid,True)
  except Exception as e:
   tg(f"Errore Gialli: {e}",cid,True)
-
-# --- SOLO NUOVO: BAD BUILDER WORLDWIDE GIORNO E NOTTE ---
 def get_builder_odds(fid):
  try:
   u="https://v3.football.api-sports.io/odds?fixture="+str(fid)
@@ -485,7 +484,6 @@ def get_builder_odds(fid):
   return odds
  except:
   return None
-
 def build_builder_combo(odds):
  combos=[]
  if "o15" in odds and "gg" in odds:
@@ -501,7 +499,6 @@ def build_builder_combo(odds):
    combos.append((odds["o65c"],f"OVER 6.5 Angoli = {odds['o65c']:.2f}"))
  combos.sort(key=lambda x: abs(x[0]-1.82))
  return combos[0] if combos else None
-
 def run_bad_builder(cid=None):
  try:
   tg("BAD BUILDER 1.82 WORLDWIDE - GIORNO E NOTTE - Cerco in TUTTO IL MONDO...",cid,True)
@@ -556,8 +553,6 @@ def run_bad_builder(cid=None):
    tg("0 partite builder trovate in tutto il mondo adesso",cid,True)
  except Exception as e:
   tg(f"Errore Builder: {e}",cid,True)
-
-# --- BASKETBALL: HANDICAP 12+ ---
 _basket_cache={}
 def basket_api(path):
  try:
@@ -620,7 +615,7 @@ def run_basket_handicap(cid=None):
    out=f"🏀 BASKET HANDICAP 12+ ODIERNE - Trovate {len(sel)} partite\n\n"
    for i,g in enumerate(sel,1):
     ora=g["time"][11:16] if len(g["time"])>=16 else g["time"]
-    out+=f"{i}. {ora} - {g['league']} - {g['home']} vs {g['away']} - Handicap {g['handicap']}\n"
+    out+=f"{ora} - {g['league']} - {g['home']} vs {g['away']} - Handicap {g['handicap']}\n"
    tg(out,cid,True)
   else:
    tg(f"🏀 BASKET HANDICAP 12+ ODIERNE - Trovate 0 partite",cid,True)
@@ -657,7 +652,6 @@ def check_basket_alert():
   except Exception as e:
    print(e)
   time.sleep(600)
-
 def acquire_single_instance():
  f=open("/tmp/bot_v54.lock","w")
  try:
@@ -697,7 +691,7 @@ def poll():
       tg("Menu chiuso",cid,True,True)
       continue
      if "apri menu" in low:
-      tg("Menu aperto FULL + OVER 1.5 90%",cid,True,False)
+      tg("Menu aperto V55 BETANO",cid,True,False)
       continue
      if "spegni" in low:
       is_paused=True
@@ -705,10 +699,10 @@ def poll():
       continue
      if "accendi" in low or "/start" in low:
       is_paused=False
-      tg("V54 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE",cid,True)
+      tg("V55 BETANO LIVE ATTIVO",cid,True)
       continue
      if "status" in low:
-      tg("STATUS V54 FULL + BUILDER WORLDWIDE + BASKET OK",cid,True)
+      tg("STATUS V55 BETANO OK",cid,True)
       continue
      if "basket" in low or "handicap" in low or "12+" in low:
       run_basket_handicap(cid)
@@ -735,7 +729,7 @@ def poll():
    pass
   time.sleep(2)
 def live_loop():
- tg("BOT V54 FULL + OVER 1.5 90% + BUILDER WORLDWIDE ATTIVO",None,True)
+ tg("BOT V55 BETANO LIVE DIRECT ATTIVO",None,True)
  while True:
   try:
    if is_paused:
