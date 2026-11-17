@@ -37,7 +37,7 @@ def is_youth(n):
 app=Flask(__name__)
 @app.route("/")
 def home():
- return "BOT V67 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET HANDICAP 12+",200
+ return "BOT V68 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET HANDICAP 12+",200
 TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 65%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["BASKET HANDICAP 12+"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
 TAST_C=json.dumps({"keyboard":[["APRI MENU"]],"resize_keyboard":True})
 def tg(m,cid=None,keys=False,chiusa=False):
@@ -590,27 +590,34 @@ def odds_api(url):
  try:
   r=requests.get(url,timeout=30)
   if r.status_code==429:
-   return "LIMIT"
-  return r.json()
+   return []
+  data=r.json()
+  if isinstance(data,list):
+   return data
+  return []
  except:
-  return None
+  return []
 
 def get_basket_games_today():
  today_str=datetime.now(ROME).strftime("%Y-%m-%d")
  sports=odds_api("https://api.the-odds-api.com/v4/sports/?apiKey="+str(ODDS_KEY or ""))
- if not sports or sports=="LIMIT":
+ if not isinstance(sports,list) or not sports:
   return []
  games=[]
  for sp in sports:
+  if not isinstance(sp,dict):
+   continue
   sk=sp.get("key","")
-  if "basket" not in sk:
+  if not isinstance(sk,str) or "basket" not in sk:
    continue
   data=odds_api(f"https://api.the-odds-api.com/v4/sports/{sk}/odds/?apiKey={ODDS_KEY}&regions=eu&markets=spreads")
-  if not data or data=="LIMIT":
+  if not isinstance(data,list) or not data:
    continue
   for gm in data:
+   if not isinstance(gm,dict):
+    continue
    ct=gm.get("commence_time","")
-   if not ct.startswith(today_str):
+   if not isinstance(ct,str) or not ct.startswith(today_str):
     continue
    gm["_sport_key"]=sk
    games.append(gm)
@@ -618,20 +625,28 @@ def get_basket_games_today():
  return games
 
 def check_handicap_12_market(game):
+ if not isinstance(game,dict):
+  return False,None,None,None
  for bm in game.get("bookmakers",[]):
+  if not isinstance(bm,dict):
+   continue
   for mkt in bm.get("markets",[]):
+   if not isinstance(mkt,dict):
+    continue
    mkey=mkt.get("key","")
-   if mkey not in ("spreads","asian_handicap","handicap"):
+   if mkey not in ("spreads","asian_handicap","handicap","hcap"):
     continue
    best_line=None
    best_odd=None
    best_team=None
    for out in mkt.get("outcomes",[]):
+    if not isinstance(out,dict):
+     continue
     try:
      pt=float(out.get("point",0))
     except:
      continue
-    if abs(pt)>=12:
+    if abs(pt)>=11.5:
      price=out.get("price")
      if price is None:
       continue
@@ -654,21 +669,30 @@ def run_basket_handicap(cid=None):
  try:
   tg("🏀 BASKET HANDICAP 12+ - Analizzo partite di oggi nel mondo...",cid,True)
   games=get_basket_games_today()
+  if isinstance(games,str):
+   try:
+    games=json.loads(games)
+   except:
+    games=[]
+  if not isinstance(games,list):
+   games=[]
   _basket_cache["games"]=games
   _basket_cache["date"]=datetime.now(ROME).strftime("%Y-%m-%d")
   _basket_cache_time=time.time()
   sel=[]
   for gm in games:
+   if not isinstance(gm,dict):
+    continue
    found,line,odd,team=check_handicap_12_market(gm)
    if not found:
     continue
    ct=gm.get("commence_time","")
    fdt=_format_basket_date(ct)
-   ora=fdt.strftime("%H:%M") if fdt else ct[11:16]
+   ora=fdt.strftime("%H:%M") if fdt else (ct[11:16] if isinstance(ct,str) and len(ct)>=16 else "?")
    home=gm.get("home_team","?")
    away=gm.get("away_team","?")
    sk=gm.get("_sport_key","")
-   league=LEAGUE_NAMES.get(sk,sk.replace("basketball_","").upper())
+   league=LEAGUE_NAMES.get(sk,sk.replace("basketball_","").upper()) if sk else "?"
    sign="+" if line>0 else ""
    sel.append((fdt,ora,league,home,away,f"{sign}{line}",odd))
   if sel:
@@ -690,14 +714,17 @@ def check_basket_alert():
     continue
    today_str=datetime.now(ROME).strftime("%Y-%m-%d")
    cache_age=time.time()-_basket_cache_time
-   if _basket_cache.get("date")==today_str and cache_age<600:
-    games=_basket_cache.get("games",[])
+   cached=_basket_cache.get("games",[])
+   if _basket_cache.get("date")==today_str and cache_age<600 and isinstance(cached,list):
+    games=cached
    else:
     games=get_basket_games_today()
     _basket_cache["games"]=games
     _basket_cache["date"]=today_str
    now=datetime.now(ROME)
    for gm in games:
+    if not isinstance(gm,dict):
+     continue
     gid=gm.get("id","")
     if gid in _basket_alert_sent:
      continue
@@ -714,7 +741,7 @@ def check_basket_alert():
      home=gm.get("home_team","?")
      away=gm.get("away_team","?")
      sk=gm.get("_sport_key","")
-     league=LEAGUE_NAMES.get(sk,sk.replace("basketball_","").upper())
+     league=LEAGUE_NAMES.get(sk,sk.replace("basketball_","").upper()) if sk else "?"
      sign="+" if line>0 else ""
      tg(f"⚠️ TRA 15 MINUTI - 🏀 {league} {home} vs {away} - Handicap {sign}{line} @ {odd:.2f}")
      _basket_alert_sent.add(gid)
@@ -723,7 +750,7 @@ def check_basket_alert():
   time.sleep(60)
 
 def acquire_single_instance():
- f=open("/tmp/bot_v67.lock","w")
+ f=open("/tmp/bot_v68.lock","w")
  try:
   fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)
   return f
@@ -769,10 +796,10 @@ def poll():
       continue
      if "accendi" in low or "/start" in low:
       is_paused=False
-      tg("V67 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+",cid,True)
+      tg("V68 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+",cid,True)
       continue
      if "status" in low:
-      tg("STATUS V67 FULL + BUILDER WORLDWIDE + BASKET HANDICAP 12+ OK",cid,True)
+      tg("STATUS V68 FULL + BUILDER WORLDWIDE + BASKET HANDICAP 12+ OK",cid,True)
       continue
      if "basket" in low or "handicap" in low or "12+" in low:
       run_basket_handicap(cid)
@@ -799,7 +826,7 @@ def poll():
    pass
   time.sleep(2)
 def live_loop():
- tg("BOT V67 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ ATTIVO",None,True)
+ tg("BOT V68 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ ATTIVO",None,True)
  while True:
   try:
    if is_paused:
