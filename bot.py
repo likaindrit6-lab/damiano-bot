@@ -6,6 +6,7 @@ from urllib.parse import quote
 BOT=os.getenv("BOT_TOKEN")
 CHAT=os.getenv("CHAT_ID")
 KEY=os.getenv("API_FOOTBALL_KEY")
+ODDS_KEY=os.getenv("ODDS_API_KEY")
 ITALY=timezone(timedelta(hours=2))
 ROME=ZoneInfo("Europe/Rome")
 is_paused=False
@@ -36,7 +37,7 @@ def is_youth(n):
 app=Flask(__name__)
 @app.route("/")
 def home():
- return "BOT V54 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET",200
+ return "BOT V67 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET HANDICAP 12+",200
 TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 65%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["BASKET HANDICAP 12+"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
 TAST_C=json.dumps({"keyboard":[["APRI MENU"]],"resize_keyboard":True})
 def tg(m,cid=None,keys=False,chiusa=False):
@@ -457,7 +458,7 @@ def run_gialli(cid=None):
  except Exception as e:
   tg(f"Errore Gialli: {e}",cid,True)
 
-# --- SOLO NUOVO: BAD BUILDER WORLDWIDE GIORNO E NOTTE ---
+# --- BAD BUILDER WORLDWIDE GIORNO E NOTTE ---
 def get_builder_odds(fid):
  try:
   u="https://v3.football.api-sports.io/odds?fixture="+str(fid)
@@ -557,109 +558,172 @@ def run_bad_builder(cid=None):
  except Exception as e:
   tg(f"Errore Builder: {e}",cid,True)
 
-# --- BASKETBALL: HANDICAP 12+ ---
+# --- BASKET HANDICAP 12+ (The Odds API) ---
 _basket_cache={}
-def basket_api(path):
+_basket_cache_time=0
+_basket_alert_sent=set()
+
+LEAGUE_NAMES={
+ "basketball_nba":"NBA",
+ "basketball_euroleague":"Eurolega",
+ "basketball_eurocup":"Eurocup",
+ "basketball_ncaab":"NCAAB",
+ "basketball_wnba":"WNBA",
+ "basketball_spain_liga_acb":"Liga ACB",
+ "basketball_italy_lega_serie_a":"Serie A",
+ "basketball_turkey_bsl":"BSL Turkey",
+ "basketball_greece_heba_a1":"HEBA A1",
+ "basketball_france_lnb_pro_a":"LNB Pro A",
+ "basketball_germany_bbl":"BBL Germany",
+ "basketball_brazil_nbb":"NBB Brazil",
+ "basketball_argentina_liga_nacional":"Liga Nacional",
+ "basketball_china_cba":"CBA China",
+ "basketball_japan_b_league":"B-League Japan",
+ "basketball_korea_kbl":"KBL Korea",
+ "basketball_philippines_pba":"PBA Philippines",
+ "basketball_portugal_liga_betclic":"Liga Portugal",
+ "basketball_adriatic_liga":"ABA Liga",
+ "basketball_vtb_united_league":"VTB United",
+}
+
+def odds_api(url):
  try:
-  r=requests.get("https://v1.basketball.api-sports.io"+path,headers={"x-apisports-key":KEY},timeout=30)
+  r=requests.get(url,timeout=30)
   if r.status_code==429:
    return "LIMIT"
-  return r.json().get("response",[])
+  return r.json()
  except:
+  return None
+
+def get_basket_games_today():
+ today_str=datetime.now(ROME).strftime("%Y-%m-%d")
+ sports=odds_api("https://api.the-odds-api.com/v4/sports/?apiKey="+str(ODDS_KEY or ""))
+ if not sports or sports=="LIMIT":
   return []
-def get_basket_handicap_games():
- today=date.today().strftime('%Y-%m-%d')
- games=basket_api(f"/games?date={today}")
- if not games or games=="LIMIT":
-  return []
- sel=[]
- for g in games:
-  gid=g.get("id")
-  if not gid:
+ games=[]
+ for sp in sports:
+  sk=sp.get("key","")
+  if "basket" not in sk:
    continue
-  odds=basket_api(f"/odds?game={gid}")
-  time.sleep(0.4)
-  if not odds or odds=="LIMIT":
+  data=odds_api(f"https://api.the-odds-api.com/v4/sports/{sk}/odds/?apiKey={ODDS_KEY}&regions=eu&markets=spreads")
+  if not data or data=="LIMIT":
    continue
-  hcp=None
-  for o in odds:
-   for b in o.get("bets",[]):
-    bn=(b.get("name") or "").lower()
-    if "handicap" in bn or "spread" in bn:
-     for v in b.get("values",[]):
-      try:
-       vv=float(v.get("value"))
-      except:
-       continue
-      if vv>=12:
-       hcp=vv
-       break
-     if hcp:
-      break
-    if hcp:
-     break
-  if hcp and hcp>=12:
-   lg=g.get("league",{})
-   sel.append({
-    "id":gid,
-    "time":g.get("time",""),
-    "league":(lg.get("name") or ""),
-    "country":(lg.get("country") or ""),
-    "home":g.get("teams",{}).get("home",{}).get("name","?"),
-    "away":g.get("teams",{}).get("away",{}).get("name","?"),
-    "handicap":hcp
-   })
- _basket_cache["today"]=sel
- _basket_cache["date"]=today
- return sel
+  for gm in data:
+   ct=gm.get("commence_time","")
+   if not ct.startswith(today_str):
+    continue
+   gm["_sport_key"]=sk
+   games.append(gm)
+  time.sleep(0.3)
+ return games
+
+def check_handicap_12_market(game):
+ for bm in game.get("bookmakers",[]):
+  for mkt in bm.get("markets",[]):
+   mkey=mkt.get("key","")
+   if mkey not in ("spreads","asian_handicap","handicap"):
+    continue
+   best_line=None
+   best_odd=None
+   best_team=None
+   for out in mkt.get("outcomes",[]):
+    try:
+     pt=float(out.get("point",0))
+    except:
+     continue
+    if abs(pt)>=12:
+     price=out.get("price")
+     if price is None:
+      continue
+     if best_odd is None or price>best_odd:
+      best_line=pt
+      best_odd=price
+      best_team=out.get("name","")
+   if best_line is not None:
+    return True,best_line,best_odd,best_team
+ return False,None,None,None
+
+def _format_basket_date(ct):
+ try:
+  fdt=datetime.fromisoformat(ct.replace("Z","+00:00")).astimezone(ROME)
+  return fdt
+ except:
+  return None
+
 def run_basket_handicap(cid=None):
  try:
   tg("🏀 BASKET HANDICAP 12+ - Analizzo partite di oggi nel mondo...",cid,True)
-  sel=get_basket_handicap_games()
+  games=get_basket_games_today()
+  _basket_cache["games"]=games
+  _basket_cache["date"]=datetime.now(ROME).strftime("%Y-%m-%d")
+  _basket_cache_time=time.time()
+  sel=[]
+  for gm in games:
+   found,line,odd,team=check_handicap_12_market(gm)
+   if not found:
+    continue
+   ct=gm.get("commence_time","")
+   fdt=_format_basket_date(ct)
+   ora=fdt.strftime("%H:%M") if fdt else ct[11:16]
+   home=gm.get("home_team","?")
+   away=gm.get("away_team","?")
+   sk=gm.get("_sport_key","")
+   league=LEAGUE_NAMES.get(sk,sk.replace("basketball_","").upper())
+   sign="+" if line>0 else ""
+   sel.append((fdt,ora,league,home,away,f"{sign}{line}",odd))
   if sel:
-   out=f"🏀 BASKET HANDICAP 12+ ODIERNE - Trovate {len(sel)} partite\n\n"
-   for i,g in enumerate(sel,1):
-    ora=g["time"][11:16] if len(g["time"])>=16 else g["time"]
-    out+=f"{i}. {ora} - {g['league']} - {g['home']} vs {g['away']} - Handicap {g['handicap']}\n"
+   data_str=datetime.now(ROME).strftime("%d/%m/%Y")
+   out=f"🏀 BASKET HANDICAP +12 - Partite di oggi [{data_str}]\n\n"
+   for _,ora,league,home,away,line_str,odd in sel:
+    out+=f"⏰ {ora} - {league} - {home} vs {away} | Spread {line_str} @ {odd:.2f}\n"
    tg(out,cid,True)
   else:
-   tg(f"🏀 BASKET HANDICAP 12+ ODIERNE - Trovate 0 partite",cid,True)
+   tg("Nessuna partita con Handicap +12 oggi, riprovo più tardi",cid,True)
  except Exception as e:
   tg(f"Errore Basket Handicap: {e}",cid,True)
+
 def check_basket_alert():
- avvisati=set()
  while True:
   try:
    if is_paused:
-    time.sleep(600)
+    time.sleep(60)
     continue
-   today=date.today().strftime('%Y-%m-%d')
-   if _basket_cache.get("date")==today:
-    sel=_basket_cache.get("today",[])
+   today_str=datetime.now(ROME).strftime("%Y-%m-%d")
+   cache_age=time.time()-_basket_cache_time
+   if _basket_cache.get("date")==today_str and cache_age<600:
+    games=_basket_cache.get("games",[])
    else:
-    sel=get_basket_handicap_games()
+    games=get_basket_games_today()
+    _basket_cache["games"]=games
+    _basket_cache["date"]=today_str
    now=datetime.now(ROME)
-   for g in sel:
-    gid=g.get("id")
-    if gid in avvisati:
+   for gm in games:
+    gid=gm.get("id","")
+    if gid in _basket_alert_sent:
      continue
-    try:
-     fd=(g.get("time") or "").replace("Z","+00:00")
-     fdt=datetime.fromisoformat(fd).astimezone(ROME)
-    except:
+    found,line,odd,team=check_handicap_12_market(gm)
+    if not found:
      continue
-    diff=fdt-now
-    mins=diff.total_seconds()/60
-    if 15<=mins<=30:
+    ct=gm.get("commence_time","")
+    fdt=_format_basket_date(ct)
+    if not fdt:
+     continue
+    diff=(fdt-now).total_seconds()/60
+    if 14<=diff<=16:
      ora=fdt.strftime("%H:%M")
-     tg(f"⏰ TRA 20 MIN - BASKET - {g['league']} - {g['home']} vs {g['away']} - Handicap {g['handicap']} - Inizia alle {ora}")
-     avvisati.add(gid)
+     home=gm.get("home_team","?")
+     away=gm.get("away_team","?")
+     sk=gm.get("_sport_key","")
+     league=LEAGUE_NAMES.get(sk,sk.replace("basketball_","").upper())
+     sign="+" if line>0 else ""
+     tg(f"⚠️ TRA 15 MINUTI - 🏀 {league} {home} vs {away} - Handicap {sign}{line} @ {odd:.2f}")
+     _basket_alert_sent.add(gid)
   except Exception as e:
    print(e)
-  time.sleep(600)
+  time.sleep(60)
 
 def acquire_single_instance():
- f=open("/tmp/bot_v54.lock","w")
+ f=open("/tmp/bot_v67.lock","w")
  try:
   fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)
   return f
@@ -705,10 +769,10 @@ def poll():
       continue
      if "accendi" in low or "/start" in low:
       is_paused=False
-      tg("V54 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE",cid,True)
+      tg("V67 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+",cid,True)
       continue
      if "status" in low:
-      tg("STATUS V54 FULL + BUILDER WORLDWIDE + BASKET OK",cid,True)
+      tg("STATUS V67 FULL + BUILDER WORLDWIDE + BASKET HANDICAP 12+ OK",cid,True)
       continue
      if "basket" in low or "handicap" in low or "12+" in low:
       run_basket_handicap(cid)
@@ -735,7 +799,7 @@ def poll():
    pass
   time.sleep(2)
 def live_loop():
- tg("BOT V54 FULL + OVER 1.5 90% + BUILDER WORLDWIDE ATTIVO",None,True)
+ tg("BOT V67 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ ATTIVO",None,True)
  while True:
   try:
    if is_paused:
