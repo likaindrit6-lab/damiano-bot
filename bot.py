@@ -37,9 +37,7 @@ def is_youth(n):
 app=Flask(__name__)
 @app.route("/")
 def home():
- return "BOT V74 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET HANDICAP 12+ DEBUG + BET365",200
-TAST=json.dumps({"keyboard":[["OVER 1.5 90% NAZIONI"],["BOLLA EUROPA 33 NAZIONI"],["DOPPIA ALTA %"],["GIALLI 65%"],["CALCIO D'ANGOLO +6"],["BAD BUILDER 1.82 WORLDWIDE"],["BASKET HANDICAP 12+"],["STATUS"],["ACCENDI","SPEGNI"],["CHIUDI MENU"]],"resize_keyboard":True})
-TAST_C=json.dumps({"keyboard":[["APRI MENU"]],"resize_keyboard":True})
+ return "BOT V76 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET HANDICAP 12+",200
 def tg(m,cid=None,keys=False,chiusa=False):
  try:
   cid=cid or CHAT
@@ -47,11 +45,6 @@ def tg(m,cid=None,keys=False,chiusa=False):
    return
   base="https://api.telegram.org/bot"+BOT
   pay={"chat_id":cid,"text":m,"parse_mode":"HTML"}
-  if keys:
-   if chiusa:
-    pay["reply_markup"]=json.loads(TAST_C)
-   else:
-    pay["reply_markup"]=json.loads(TAST)
   requests.post(base+"/sendMessage",json=pay,timeout=20)
  except Exception as e:
   print(e)
@@ -63,21 +56,22 @@ def api(url):
   return r.json().get("response",[])
  except:
   return []
+def goldbet_button(home,away):
+ u=f"https://www.goldbet.it/qs/sport/ricerca/{quote(home+' '+away)}"
+ return {"text":"Goldbet - Vai alla partita","url":u}
 def tg_inline(m,rows,cid=None):
  try:
   cid=cid or CHAT
   if not cid or not BOT:
    return
-  requests.post("https://api.telegram.org/bot"+BOT+"/sendMessage",json={"chat_id":cid,"text":m,"parse_mode":"HTML","reply_markup":{"inline_keyboard":rows}},timeout=20)
+  base="https://api.telegram.org/bot"+BOT
+  pay={"chat_id":cid,"text":m,"parse_mode":"HTML"}
+  if rows:
+   kb=[[r] for r in rows]
+   pay["reply_markup"]=json.dumps({"inline_keyboard":kb})
+  requests.post(base+"/sendMessage",json=pay,timeout=20)
  except Exception as e:
   print(e)
-def bet365_link(home,away):
- return f"https://www.bet365.com/#/Search/?q={quote(home)}%20vs%20{quote(away)}"
-def bet365_button(home,away):
- return [{"text":"🎯 Bet365 - Vai alla partita","url":bet365_link(home,away)}]
-def match_buttons(home,away):
- link=bet365_link(home,away)
- return [{"text":"🎯 Bet365 - Vai alla partita","url":link},{"text":"💰 DC + Multigol 1-5","url":link}]
 def get_sot(fid):
  st=api(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fid}")
  if st=="LIMIT" or not st or len(st)<2:
@@ -257,11 +251,9 @@ def run_corner_over65(cid=None):
   if sel:
    sel.sort(key=lambda x: x[0], reverse=True)
    out=f"OVER 6.5 ANGOLI PRE MATCH - {len(sel)} partite OGGI (su {chk})\n\n"
-   rows=[]
    for i,(a,m,hn,an) in enumerate(sel,1):
     out+=f"{i}. {m}\n"
-    rows.append(bet365_button(hn,an))
-   tg_inline(out,rows,cid)
+   tg_inline(out,None,cid)
   else:
    tg(f"0 partite con media Over 6.5 oggi. Analizzate {chk}",cid,True)
  except Exception as e:
@@ -313,11 +305,9 @@ def run_over90(cid=None):
     break
   if sel:
    out=f"OVER 1.5 90% NAZIONI - {len(sel)} partite\n\n"
-   rows=[]
    for i,(m,hn,an) in enumerate(sel,1):
     out+=f"{i}. {m}\n"
-    rows.append(bet365_button(hn,an))
-   tg_inline(out,rows,cid)
+   tg_inline(out,None,cid)
   else:
    tg(f"0 partite 90% oggi. Controllate {chk}",cid,True)
  except Exception as e:
@@ -356,11 +346,9 @@ def run_doppia(cid=None):
     break
   if out:
    txt="DOPPIA "+str(len(out))+" OVER 1.5\n\n"
-   rows=[]
    for i,(m,hn,an) in enumerate(out,1):
     txt+=f"{i}. {m}\n"
-    rows.append(bet365_button(hn,an))
-   tg_inline(txt,rows,cid)
+   tg_inline(txt,None,cid)
   else:
    tg("Nessuna DOPPIA oggi",cid,True)
  except Exception as e:
@@ -448,6 +436,7 @@ def run_gialli(cid=None):
    if g2=="LIMIT":
     time.sleep(60)
     g2=get_gialli_avg_team(aid)
+   if not isinstance(g
    if not isinstance(g2,float):
     continue
    avg=(g1+g2)/2
@@ -461,11 +450,9 @@ def run_gialli(cid=None):
      break
   if sel:
    out=f"GIALLI 65% - {len(sel)} partite\n\n"
-   rows=[]
    for i,(m,hn,an) in enumerate(sel,1):
     out+=f"{i}. {m}\n"
-    rows.append(bet365_button(hn,an))
-   tg_inline(out,rows,cid)
+   tg_inline(out,None,cid)
   else:
    tg(f"0 partite gialli 65% oggi. Controllate {chk} su {len(eligible)} nel mondo",cid,True)
  except Exception as e:
@@ -563,11 +550,9 @@ def run_bad_builder(cid=None):
     break
   if sel:
    out=f"BAD BUILDER 1.82 WORLDWIDE - {len(sel)} partite (MONDO)\n\n"
-   rows=[]
    for i,(m,hn,an) in enumerate(sel,1):
     out+=f"{i}. {m}\n\n"
-    rows.append(bet365_button(hn,an))
-   tg_inline(out,rows,cid)
+   tg_inline(out,None,cid)
   else:
    tg("0 partite builder trovate in tutto il mondo adesso",cid,True)
  except Exception as e:
@@ -834,8 +819,7 @@ def run_basket_handicap(cid=None):
     out+=f"⏰ {ora} - {home} vs {away} | Spread {line_str} @ {best_odd:.2f}\n"
    else:
     out+=f"⏰ {ora} - {home} vs {away} | Spread {line_str}\n"
-   rows.append(bet365_button(home,away))
-  tg_inline(out,rows,cid)
+  tg_inline(out,None,cid)
  except Exception as e:
   tg(f"ERRORE DEBUG: {e}",cid,True)
 
@@ -877,14 +861,14 @@ def check_basket_alert():
      league=LEAGUE_NAMES.get(sk,sk.replace("basketball_","").upper()) if sk else "?"
      sign="+" if line>0 else ""
      msg=f"⚠️ TRA 15 MINUTI - 🏀 {league} {home} vs {away} - Handicap {sign}{line} @ {odd:.2f}"
-     tg_inline(msg,[bet365_button(home,away)])
+     tg_inline(msg,[goldbet_button(home,away)])
      _basket_alert_sent.add(gid)
   except Exception as e:
    print(e)
   time.sleep(60)
 
 def acquire_single_instance():
- f=open("/tmp/bot_v74.lock","w")
+ f=open("/tmp/bot_v76.lock","w")
  try:
   fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)
   return f
@@ -918,22 +902,16 @@ def poll():
      cid=msg.get("chat",{}).get("id")
      if not txt:
       continue
-     if "chiudi menu" in low:
-      tg("Menu chiuso",cid,True,True)
-      continue
-     if "apri menu" in low:
-      tg("Menu aperto FULL + OVER 1.5 90%",cid,True,False)
-      continue
      if "spegni" in low:
       is_paused=True
-      tg("PAUSA",cid,True)
+      tg("PAUSA",cid)
       continue
      if "accendi" in low or "/start" in low:
       is_paused=False
-      tg("V74 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ DEBUG + BET365",cid,True)
+      tg("V76 FULL ATTIVO + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+",cid)
       continue
      if "status" in low:
-      tg("STATUS V74 FULL + BUILDER WORLDWIDE + BASKET HANDICAP 12+ DEBUG + BET365 OK",cid,True)
+      tg("STATUS V76 FULL + BUILDER WORLDWIDE + BASKET HANDICAP 12+ OK",cid)
       continue
      if "basket" in low or "handicap" in low or "12+" in low:
       run_basket_handicap(cid)
@@ -960,7 +938,7 @@ def poll():
    pass
   time.sleep(2)
 def live_loop():
- tg("BOT V74 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ DEBUG + BET365 ATTIVO",None,True)
+ tg("BOT V76 FULL + OVER 1.5 90% + BUILDER WORLDWIDE + BASKET 12+ ATTIVO",None)
  while True:
   try:
    if is_paused:
@@ -1036,7 +1014,7 @@ def live_loop():
      sot=get_sot(fid)
      if sot is not None and sot>=7:
       dc="X2 + Multigol 1-5" if ga>gh else "1X + Multigol 1-5"
-      tg_inline(f"🚀 GIOCALO {mm}' {label} {home} {gh}-{ga} {away} Tiri in porta:{sot}\n\n- Over 0.5 Gol (quota stimata 1.60)\n- Gioca: {dc} (quota stimata 1.70)",[match_buttons(home,away)])
+      tg_inline(f"🚀 GIOCALO {mm}' {label} {home} {gh}-{ga} {away} Tiri in porta:{sot}\n\n- Over 0.5 Gol (quota stimata 1.60)\n- Gioca: {dc} (quota stimata 1.70)",[goldbet_button(home,away)])
       av_s.add(fid)
       av_g[fid]=gh+ga
    for g in games:
@@ -1081,8 +1059,7 @@ def check_tripla_automatica():
    rows=[]
    for i,(sot,label,home,away,gh,ga) in enumerate(top,1):
     msg+=f"{i}. {label} {home} {gh}-{ga} {away} Tiri in porta:{sot}\n"
-    rows.append(match_buttons(home,away))
-   tg_inline(msg,rows)
+   tg_inline(msg,None)
   except Exception as e:
    print(e)
 _LOCK=acquire_single_instance()
